@@ -14,6 +14,8 @@ Article ID 675130, 11 pages, 2012.
 
 from random import getrandbits, random
 from dataclasses import dataclass
+import itertools
+from bitarray import bitarray
 
 DEBUG = True
 
@@ -122,56 +124,27 @@ class Rng:
             if cursor == 0:
                 break
 
+
 class Invariant:
     """Represents a relationship between variables, described in a Newton invariant."""
+
+    # ID bit for a sensor is set to 1 when sensor is read, and not reset until privacy budget is fully replenished.
+    read_bitfield = bitarray()
+
     def __init__(self, fn, sensors):
-        """Define relationship between sensor measurements
+        """Define relationship between sensor measurements.
 
         fn      -- mathematical equation relating sensor measurements
-        sensors -- measurements being related i.e. arguments to fn
+        sensors -- measurements being related i.e. arguments to fn.
+                    List of unique sensor IDs in the order accepted by self.fn()
         """
         self.fn = fn
         self.sensors = sensors
-        
+        # Create bitfield to list all the sensors involved in the invariant
+        self.bitfield = bitarray(len(sensors))
+        for ID in sensors:
+            self.bitfield[ID] = 1
 
-class Sensor(HardwareSensor):
-    """Represents sensor along with additional privacy information supplied along with Newton description.
-
-    minimum  -- minimum sensor output
-    maximum  -- maximum sensor output
-    p_budget -- privacy budget (units ε)
-    rep_rate -- budget replenishment rate (per arbitrary time uint)
-    epsilon  -- privacy factor (smaller value means greater privacy)
-    """
-    def __init__(self, minimum, maximum, budget, rep_rate, epsilon):
-        super().__init__(minimum, maximum)
-        self.budget = budget
-        self.rep_rate = rep_rate
-        self.epsilon = epsilon
-
-        self.prev_return_value = 0  # Last query response returned
-
-    def query(self):
-        noise = random()  # Todo: replace with Laplace(self.d/self.epsilon) noise, using Schryver et al. and Choi et al. techniques
-
-        privacy_loss = 1  # Todo: calculate privacy loss (a function of random value)
-
-        # Todo: calculate privacy loss for all related sensors and perform this check for all of them
-
-        if self.budget > privacy_loss:
-            self.budget -= privacy_loss
-            true_measurement = super().read()
-            self.prev_return_value = true_measurement + noise
-            return self.prev_return_value
-        else:
-            return self.prev_return_value  # If insufficient privacy budget, return the last value i.e. no information revealed
-
-    def rep_clock(self, number=1):
-        """Apply 'number' privacy budget replenishment clock pulses.
-
-        number -- number of pulses to apply, each replenishes the budget by rep_rate
-        """
-        self.budget += number * self.rep_rate
 
 class HardwareSensor:
     """Represents hardware sensor and driver, output is a base Newton signal."""
@@ -189,7 +162,63 @@ class HardwareSensor:
         """Simulate reading from the physical sensor."""
         return self.min + self.d * random()  # Return a random value within the sensor range
 
+
+class Sensor(HardwareSensor):
+    """Represents sensor along with additional privacy information supplied along with Newton description.
+
+    minimum    -- minimum sensor output
+    maximum    -- maximum sensor output
+    budget_max -- privacy budget (units ε)
+    rep_rate   -- budget replenishment rate (per arbitrary time uint)
+    epsilon    -- privacy factor (smaller value means greater privacy)
+    invariants -- list of all nvariants involving the sensor
+    """
+
+    next_id = itertools.count().next
+
+    def __init__(self, minimum, maximum, budget_max, rep_rate, epsilon, invariants):
+        super().__init__(minimum, maximum)
+        self.budget_max = budget_max
+        self.budget = budget_max
+        self.rep_rate = rep_rate
+        self.epsilon = epsilon
+        self.invariants = invariants
+
+        self.id = Sensor.next_id()  # Unique ID
+        Invariant.read_bitfield.append(0)
+        self.prev_return_value = 0  # Last query response returned
+
+    def query(self):
+        noise = random()  # Todo: replace with Laplace(self.d/self.epsilon) noise, using Schryver et al. and Choi et al. techniques
+
+        privacy_loss = 1  # Todo: calculate privacy loss (a function of random value)
+
+        # Todo: calculate privacy loss for all related sensors and perform this check for all of them
+
+        if self.budget > privacy_loss:
+            self.budget -= privacy_loss
+            Invariant.read_bitfield[ID] = 1
+            true_measurement = super().read()
+            self.prev_return_value = true_measurement + noise
+            return self.prev_return_value
+        else:
+            # If insufficient privacy budget, return the last value i.e. no information revealed
+            return self.prev_return_value
+
+    def rep_clock(self, number=1):
+        """Apply 'number' privacy budget replenishment clock pulses.
+
+        number -- number of pulses to apply, each replenishes the budget by rep_rate
+        """
+        budget_increase = number * self.rep_rate
+        if self.budget < self.budget_max - budget_increase:
+            self.budget += budget_increase
+        else:
+            self.budget = self.budget_max
+            Invariant.read_bitfield[ID] = 0
+
+
 if __name__ == '__main__':
-    sensors = [HardwareSensor(i, 100 + 2*i) for i in range(3)]  # Arbitrary sensors with arbitrary limits
+    sensor_list = [HardwareSensor(i, 100 + 2*i) for i in range(3)]  # Arbitrary sensors with arbitrary limits
     rng = Rng(8, 16, 2, 3, 3)
     print("Floating point URNG output: {}".format(bin(rng.floating_point().to_int())))
