@@ -16,6 +16,8 @@ from random import getrandbits, random
 from dataclasses import dataclass
 import itertools
 from bitarray import bitarray
+import numpy as np
+import matplotlib.pyplot as plt
 
 DEBUG = True
 
@@ -38,7 +40,8 @@ class RandFloat:
     m: int
     mant_bw: int
 
-    def to_int(self):
+    def to_bits(self):
+        """Convert object to m bit representation"""
         bits = (self.exponent << self.mant_bw) + self.mantissa
         bits |= (self.part << self.m - 2)
         bits |= (self.symm << self.m - 1)
@@ -47,7 +50,7 @@ class RandFloat:
 
 class Rng:
     """Simulate fixed point RNG."""
-    def __init__(self, Bx, By, k, mant_bw, max_exp):
+    def __init__(self, Bx, By, k, mant_bw, growing_oct=54, diminishing_oct=4):
         """Initialise object, set the number of bits used by URNG and Laplace output.
         Conversion from URNG to Laplace distribution is described by de Schryver et al.
 
@@ -56,9 +59,10 @@ class Rng:
         By      -- number of random bits in the RNG output (Laplace distribution)
 
         # Inversion method by de Schryver et al.
-        k       -- each 'octave' is divided into 2**k 'subsections'
-        mant_bw -- width of mantissa of floating point URNG output representation
-        max_exp -- maximum exponent value
+        k               -- each 'octave' is divided into 2**k 'subsections'
+        mant_bw         -- width of mantissa of floating point URNG output representation
+        growing_oct     -- number of growing 'octaves'
+        diminishing_oct -- number of diminishing 'octaves'
         """
 
         self.Bx = Bx
@@ -67,9 +71,19 @@ class Rng:
         self.Bx = Bx
         self.k = k
         self.mant_bw = mant_bw
-        self.max_exp = max_exp
-
         self.exp_bw = self.Bx - 2 - self.mant_bw  # Width of exponent in floating point URNG output representation
+        if self.exp_bw < 1:
+            raise ValueError("Bx  - 2 - mant_bw must be > 0")
+        self.growing_oct = growing_oct  # max exp
+        self.diminishing_oct = diminishing_oct  # max exp
+        if growing_oct > 2**self.exp_bw:
+            raise ValueError("Number of growing octaves cannot exceed address space (2^exp_bw)")
+        if diminishing_oct > 2**self.exp_bw:
+            raise ValueError("Number of diminishing octaves cannot exceed address space (2^exp_bw)")
+
+        self.min_x = 1 / (2 ** (self.growing_oct + 3))
+        self.max_x = 0.5 - 1 / (2 ** (self.diminishing_oct + 3))
+        self.quantisation_step = (self.laplace_inv_cdf(self.max_x) - self.laplace_inv_cdf(self.min_x)) / 2 ** self.By
 
     def urng(self, bits=None):
         """Return a random number from the URNG.
@@ -84,14 +98,24 @@ class Rng:
             print("URNG output: {}".format(bin(random_bits)))
         return random_bits
 
-    def floating_point(self):
+    def floating_point(self, urand=None):
         """Convert URNG output to floating point form
+
+        urand -- uniform random number
         """
-        rn = self.urng()
+        if urand is None:
+            rn = self.urng()
+        else:
+            rn = urand
 
         # Boolean values (single bit)
-        symm = rn & 2 ** (self.Bx - 1)  # MSB
-        part = rn & 2 ** (self.Bx - 2)
+        symm = rn >> (self.Bx - 1)  # MSB
+        part = (rn >> (self.Bx - 2)) - symm
+
+        if part:
+            max_exp = self.diminishing_oct
+        else:
+            max_exp = self.growing_oct
 
         # Divide up the remaining bits
         exponent_part = self.get_exponent(rn)
@@ -99,30 +123,89 @@ class Rng:
 
         # Exponent is calculated by counting leading zeros
         leading_zeros = self.count_leading_zeros(exponent_part, self.exp_bw)
-        while exponent_part == 0 and leading_zeros < self.max_exp:
+        while exponent_part == 0 and leading_zeros < max_exp:
             exponent_part = self.get_exponent(self.urng())
             leading_zeros += self.count_leading_zeros(exponent_part, self.exp_bw)
-        exponent = min(leading_zeros, self.max_exp)
+        exponent = min(leading_zeros, max_exp)
 
-        return RandFloat(symm!=0, part!=0, exponent, mantissa, self.Bx, self.mant_bw)
+        return RandFloat(symm != 0, part != 0, exponent, mantissa, self.Bx, self.mant_bw)
 
-    def get_exponent(self, rn):
-        return (rn & (2 ** (self.Bx - 2) - 1)) >> self.mant_bw
+    def get_exponent(self, rbv):
+        """Return exponent bits from random bit vector
 
-    def get_mantissa(self, rn):
-        return rn & 2 ** self.mant_bw - 1
+        rbv -- random bit vector"""
+        return (rbv >> self.mant_bw) & (2**self.exp_bw - 1)
+
+    def get_mantissa(self, rbv):
+        """Return mantissa bits from random bit vector
+
+        rbv -- random bit vector"""
+        return rbv & (2 ** self.mant_bw - 1)
+
+    def fake_lookup(self, symm, part, exp, mant):
+        """Simulate FPGA lookup table that returns linear approximation of inverse CDF for Laplace distribution
+
+        symm -- symmetry bit
+        part -- part bit
+        exp  -- exponent bits
+        mant -- mantissa bits"""
+        # if part:
+        #     offset = self.growing_oct * 2**self.k
+        # else:
+        #     offset = 0
+        # section_addr = offset + exp
+        subsection_addr = mant >> (self.mant_bw - self.k)
+
+        octave_width = 1 / (2 ** (exp + 3))
+        subsection_width = octave_width / 2**self.k
+        # Bound a is the greater bound
+        if part:
+            octave_bound_b = 0.5 - 1 / (2 ** (exp + 2))
+            # octave_bound_a = octave_bound_b + octave_width
+        else:
+            octave_bound_a = 1 / (2 ** (exp + 2))
+            octave_bound_b = octave_bound_a - octave_width
+
+        x_coord = octave_bound_b + subsection_addr * subsection_width
+        x_coord_next = x_coord + subsection_width
+
+        c0 = np.round(self.laplace_inv_cdf(x_coord)/self.quantisation_step)  # * self.quantisation_step to normalise
+        c0_next = np.round(self.laplace_inv_cdf(x_coord_next)/self.quantisation_step)  # * self.quantisation_step to normalise
+        c1 = (c0_next - c0)/subsection_width
+
+        if symm:
+            c0 = -c0
+            c1 = -c1
+            x_coord = 1-x_coord
+
+        # if DEBUG:
+        #     plt.plot(x_coord, c0, 'r+')
+
+        retval = c0 + c1 * (mant & 2**((self.mant_bw-self.k)-1))
+        return retval
+
+    @staticmethod
+    def laplace_inv_cdf(p, mu=0, b=1):
+        """Inverse cumulative distribution function for Laplace distribution
+        p  -- function input
+        mu -- mean of Laplace distribution
+        b  -- Laplace distribution scale parameter"""
+        return mu - b * np.sign(p-0.5) * np.log(1-2*abs(p-0.5))
 
     @staticmethod
     def count_leading_zeros(val, num_bits):
-        if val == 0:
-            return 1
-        cursor = 2 ** (num_bits - 1)
+        """Count leading zeros in val, with maximum num_bits
+
+        val      -- bit array to count leading zeros in
+        num_bits -- maximum number of bits in val"""
+        # cursor = 2 ** (num_bits - 1)
+        local_val = val
         count = 0
-        while val & cursor == 0:
-            count += 1
-            cursor >> 1
-            if cursor == 0:
-                break
+        for i in range(0, num_bits):
+            if local_val - (local_val >> 1) == 0:
+                count += 1
+            local_val = local_val >> 1
+        return count
 
 
 class Invariant:
@@ -174,7 +257,7 @@ class Sensor(HardwareSensor):
     invariants -- list of all nvariants involving the sensor
     """
 
-    next_id = itertools.count().next
+    next_id = next(itertools.count())
 
     def __init__(self, minimum, maximum, budget_max, rep_rate, epsilon, invariants):
         super().__init__(minimum, maximum)
@@ -189,6 +272,7 @@ class Sensor(HardwareSensor):
         self.prev_return_value = 0  # Last query response returned
 
     def query(self):
+        """Query a sensor - noised value is returned and appropriate privacy control is performed"""
         noise = random()  # Todo: replace with Laplace(self.d/self.epsilon) noise, using Schryver et al. and Choi et al. techniques
 
         privacy_loss = 1  # Todo: calculate privacy loss (a function of random value)
@@ -219,6 +303,17 @@ class Sensor(HardwareSensor):
 
 
 if __name__ == '__main__':
-    sensor_list = [HardwareSensor(i, 100 + 2*i) for i in range(3)]  # Arbitrary sensors with arbitrary limits
-    rng = Rng(8, 16, 2, 3, 3)
-    print("Floating point URNG output: {}".format(bin(rng.floating_point().to_int())))
+    # sensor_list = [HardwareSensor(i, 100 + 2*i) for i in range(3)]  # Arbitrary sensors with arbitrary limits
+    # rng = Rng(8, 16, 2, 3, 3)
+    # print("Floating point URNG output: {}".format(bin(rng.floating_point().to_int())))
+
+    # Test RNG
+    rng = Rng(8, 16, 2, 3, 3, 2)
+    for i in range(0, 2**7):
+        rn = rng.floating_point(i)
+        rng.fake_lookup(rn.symm, rn.part, rn.exponent, rn.mantissa)
+    # x = np.linspace(rng.min_x, 1-rng.min_x, 100)
+    x = np.linspace(rng.min_x, rng.max_x, 100)
+    plt.plot(x, rng.laplace_inv_cdf(x)/rng.quantisation_step)
+    plt.show()
+
