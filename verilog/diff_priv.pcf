@@ -1,0 +1,4 @@
+# Pcf file for place and route
+# Pinout can be found on http://www.latticesemi.com/en/Products/FPGAandCPLD/iCE40UltraPlus
+
+set_io led 2

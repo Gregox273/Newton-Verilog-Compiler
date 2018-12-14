@@ -68,7 +68,6 @@ class Rng:
         self.Bx = Bx
         self.By = By
 
-        self.Bx = Bx
         self.k = k
         self.mant_bw = mant_bw
         self.exp_bw = self.Bx - 2 - self.mant_bw  # Width of exponent in floating point URNG output representation
