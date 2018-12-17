@@ -1,9 +1,9 @@
+`ifndef _utils_vh_
+`define _utils_vh_
+
 // Base 2 log
 // Source:
 //  Jonathan Mayer, stackoverflow (https://stackoverflow.com/questions/5269634/address-width-from-ram-depth)
-`ifndef _clog2_vh_
-`define _clog2_vh_
-
 `define CLOG2(x) \
    (x <= 2) ? 1 : \
    (x <= 4) ? 2 : \
@@ -15,4 +15,7 @@
 	 (x <= 256) ? 8 : \
    -1
 
- `endif  // _clog2_vh_
+ // Max
+ `define MAX(x,y) (x)>(y)?(x):(y)
+
+ `endif  // _utils_vh_

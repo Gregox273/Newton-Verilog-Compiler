@@ -1,0 +1,11 @@
+Things to autogenerate:
+- c0 and c1 lookup table
+- parameters in .vh files (and check they are compatible)
+
+Done:
+- First attempts at urng to float conversion
+
+Todo:
+- Tests/testbench
+- URNG 
+- Everything else!

@@ -3,7 +3,7 @@
 //    V. Oklobdzija, “An Implementation Algorithm and Design of a Novel
 //    Leading Zero Detector Circuit”, 26th IEEE Asilomar Conference on Signals,
 //    Systems, and Computers, 1992, pp. 391- 395.
-`include "clog2.vh"
+`include "utils.vh"
 //`include "rng.vh"
 
 module clz_encode(
@@ -38,8 +38,7 @@ module clz_merge_N(
   output [0:bits_out-1] pg);
 
   parameter N = 4;
-  //parameter bits_out = `CLOG2(N);
-  parameter bits_out = $clog2(N);
+  parameter bits_out = `CLOG2(N);
 
   always@* begin
     vg = vl | vr;
@@ -59,7 +58,7 @@ module clz(
 
   parameter half_bits_in = 2;
   parameter bits_in = 2*half_bits_in;
-  parameter bits_out = $clog2(bits_in);
+  parameter bits_out = `CLOG2(bits_in);
 
   // Generate the necessary wires
   genvar i_wN;
@@ -98,7 +97,7 @@ module clz(
             .vr(lzd_wN[i_N-1].v[2*i_Nx+1]),
             .pl(lzd_wN[i_N-1].v[(2*i_N*i_Nx) : (2*i_N*i_Nx + i_N - 1)]),
             .pr(lzd_wN[i_N-1].v[2*i_N*i_Nx + i_N : 2*i_N*i_Nx + 2*i_N - 1]),
-            .vg(lzd_wN[i_N].v[i_nX]),
+            .vg(lzd_wN[i_N].v[i_Nx]),
             .pg(lzd_wN[i_N].p[(i_N+1)*i_Nx : (i_N+1)*(i_Nx+1)-1])
           );
       end
