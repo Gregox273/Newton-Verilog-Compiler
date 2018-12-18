@@ -6,6 +6,7 @@ Done:
 - First attempts at urng to float conversion
 
 Todo:
+- 'rng' top level module (it is commented out)
 - Tests/testbench
 - URNG 
 - Everything else!

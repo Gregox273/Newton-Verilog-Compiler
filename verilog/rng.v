@@ -81,5 +81,37 @@ module rng_lookup(
 	parameter D_OCT = `RNG_DIMINISHING_OCT;
 
 	reg [BY-1:0] lookup_mem_c0 [0:(G_OCT+D_OCT)*2**K - 1];
+	reg [BY-1:0] lookup_mem_c1 [0:(G_OCT+D_OCT)*2**K - 1];
+
+	initial begin
+		$readmemh("c0.mem", lookup_mem_c0);
+		$readmemh("c1.mem", lookup_mem_c1);
+	end
+
+	always@(posedge clock) begin
+		c0 <= lookup_mem_c0[section_addr * 2**K + subsection_addr];
+		c1 <= lookup_mem_c1[section_addr * 2**K + subsection_addr];
+	end
 
 endmodule  // rng_lookup
+
+// module rng(
+//
+// 	);
+//
+// 	rng_uniform_to_float u_to_f(
+// 		.clock(),
+// 		.rst(),
+// 		.uniform(),
+// 		floating(),
+// 		data_valid()
+// 	);
+//
+// 	rng_lookup lookup(
+// 		.clock(),
+// 		.section_addr(),
+// 		.subsection_addr(),
+// 		.c0(),
+// 		.c1()
+// 	);
+// endmodule;
