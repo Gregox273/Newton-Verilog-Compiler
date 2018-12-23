@@ -1,5 +1,6 @@
 #include <yaml.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "yaml_parse.h"
 
@@ -10,7 +11,6 @@ typedef enum heading_1
     NUM_HEADINGS
 }Heading_1;
 
-// Fields should be in the order that they appear in the relevant structs
 typedef enum urng_fields
 {
     URNG_BX
@@ -28,16 +28,19 @@ typedef enum rng_fields
 typedef struct parser_state
 {
     // Addresses of data structs to populate from YAML file
-    URNG_data *urng_data_addr;
-    RNG_data *rng_data_addr;
+    UrngData *urng_data_addr;
+    RngData *rng_data_addr;
     Heading_1 current_heading_1;  // Name of struct currently being populated
-    uint8_t current_field;  // Current field to fill in
-    uint8_t *current_field_addr;
+    uint8_t current_field;        // Current field to fill in
+    void *current_field_addr;  // Address of current field
 }Parser_state;
 
 Heading_1 get_current_heading(const yaml_event_t *const event)
 {
-    /* Return Heading_1 number based on name in yaml event */
+    /* Return Heading_1 number based on name in yaml event
+     *
+     * event -- pointer to yaml parser event
+     */
     if(strncmp((char *)event->data.scalar.value, "URNG", 4)==0)
     {
         return URNG_HEADING_1;
@@ -47,60 +50,75 @@ Heading_1 get_current_heading(const yaml_event_t *const event)
         return RNG_HEADING_1;
     }
     else{
-        printf("Unrecognised heading \"%s\"",event->data.scalar.value);
+        printf("Unrecognised heading \"%s\"\n",event->data.scalar.value);
         exit(EXIT_FAILURE);
     }
 }
 
 Urng_fields get_current_field_urng(const yaml_event_t *const event, Parser_state *const state)
 {
+    /* Return Urng field number based on name in yaml event
+     *
+     * event -- pointer to yaml parser event
+     * state -- pointer to state of parser loop
+     */
     if(strncmp((char *)event->data.scalar.value, "BX", 2)==0) {
-        state->current_field_addr = &state->urng_data_addr->BX;
+        state->current_field_addr = (void*)&state->urng_data_addr->BX;
         return URNG_BX;
     }
     else
     {
-        printf("Unrecognised heading \"%s\"",event->data.scalar.value);
+        printf("Unrecognised heading \"%s\"\n",event->data.scalar.value);
         exit(EXIT_FAILURE);
     }
 }
 
 Rng_fields get_current_field_rng(const yaml_event_t *const event, Parser_state *const state)
 {
+    /* Return Rng field number based on name in yaml event
+     *
+     * event -- pointer to yaml parser event
+     * state -- pointer to state of parser loop
+     */
     if(strncmp((char *)event->data.scalar.value, "BY", 2)==0)
     {
-        state->current_field_addr = &state->rng_data_addr->BY;
+        state->current_field_addr = (void*)&state->rng_data_addr->BY;
         return RNG_BY;
     }
     else if(strncmp((char *)event->data.scalar.value, "K", 1)==0)
     {
-        state->current_field_addr = &state->rng_data_addr->K;
+        state->current_field_addr = (void*)&state->rng_data_addr->K;
         return RNG_K;
     }
     else if(strncmp((char *)event->data.scalar.value, "MANT_BW", 7)==0)
     {
-        state->current_field_addr = &state->rng_data_addr->MANT_BW;
+        state->current_field_addr = (void*)&state->rng_data_addr->MANT_BW;
         return RNG_MANT_BW;
     }
     else if(strncmp((char *)event->data.scalar.value, "GROWING_OCT", 11)==0)
     {
-        state->current_field_addr = &state->rng_data_addr->GROWING_OCT;
+        state->current_field_addr = (void*)&state->rng_data_addr->GROWING_OCT;
         return RNG_GROWING_OCT;
     }
     else if(strncmp((char *)event->data.scalar.value, "DIMINISHING_OCT", 15)==0)
     {
-        state->current_field_addr = &state->rng_data_addr->DIMINISHING_OCT;
+        state->current_field_addr = (void*)&state->rng_data_addr->DIMINISHING_OCT;
         return RNG_DIMINISHING_OCT;
     }
     else
     {
-        printf("Unrecognised heading \"%s\"",event->data.scalar.value);
+        printf("Unrecognised heading \"%s\"\n",event->data.scalar.value);
         exit(EXIT_FAILURE);
     }
 }
 
 uint8_t get_current_field(const yaml_event_t *const event, Parser_state *const state)
 {
+    /* Return field number from yaml event based on current Heading_1 and parser state
+     *
+     * event -- pointer to yaml parser event
+     * state -- pointer to state of parser loop
+     */
     switch(state->current_heading_1)
     {
         case URNG_HEADING_1:
@@ -108,21 +126,27 @@ uint8_t get_current_field(const yaml_event_t *const event, Parser_state *const s
         case RNG_HEADING_1:
             return get_current_field_rng(event, state);
         default:
-            printf("Forgot to add case for heading no. \"%d\"",state->current_heading_1);
+            printf("Forgot to add case for heading no. \"%d\"\n",state->current_heading_1);
             exit(EXIT_FAILURE);
     }
 }
 
 void handle_value(const yaml_event_t *const event, Parser_state *state)
 {
+    /* Store value from YAML file in relevant struct
+     *
+     * event -- pointer to YAML parser event
+     * state -- pointer to state of parser loop
+     */
+
     // Add switch case here to accommodate fields that cannot be handled in the following default case:
-    *state->current_field_addr = atoi((char *)event->data.scalar.value);
+    *(uint8_t*)state->current_field_addr = (uint8_t)atoi((char *)event->data.scalar.value);
 }
 
-int parse_yaml(const char *filename, URNG_data *const urng_data, RNG_data *const rng_data)
+int yaml_parse_parse(const char *filename, UrngData *const urng_data, RngData *const rng_data)
 {
     FILE *yaml_file = fopen(filename, "r");
-    printf("\nParsing YAML file: '%s'", filename);
+    printf("Parsing YAML file: \"%s\"\n", filename);
 
     yaml_parser_t parser;
     yaml_event_t event;
@@ -130,12 +154,13 @@ int parse_yaml(const char *filename, URNG_data *const urng_data, RNG_data *const
     // Initialise parser
     if(!yaml_parser_initialize(&parser))
     {
-        fputs("\nFailed to initialize parser!", stderr);
+        printf("Failed to initialize parser!\n");
+        fclose (yaml_file);
         return 1;
     }
     if(yaml_file == NULL)
     {
-        fputs("\nFailed to open file %s!", stderr);
+        printf("Failed to open file %s!\n", filename);
         return 1;
     }
 
@@ -149,6 +174,7 @@ int parse_yaml(const char *filename, URNG_data *const urng_data, RNG_data *const
             .current_field = 0,
             .current_field_addr = NULL
     };
+
     // Add new structs here, add their addresses to the data_structs array below
     size_t data_structs[NUM_HEADINGS];
     data_structs[URNG_HEADING_1] = (size_t)&urng_data;
@@ -157,9 +183,8 @@ int parse_yaml(const char *filename, URNG_data *const urng_data, RNG_data *const
     do
     {
         if (!yaml_parser_parse(&parser, &event)) {
-            printf("\nParser error %d", parser.error);
-            //exit(EXIT_FAILURE);
-            return 1;
+            printf("Parser error %d\n", parser.error);
+            exit(EXIT_FAILURE);
         }
 
         switch(event.type)
@@ -188,7 +213,7 @@ int parse_yaml(const char *filename, URNG_data *const urng_data, RNG_data *const
                         break;
 
                     default:
-                        printf("\nUnexpected value \"%s\"",event.data.scalar.value);
+                        printf("Unexpected value \"%s\"\n",event.data.scalar.value);
                         exit(EXIT_FAILURE);
                 }
                 break;
@@ -204,6 +229,26 @@ int parse_yaml(const char *filename, URNG_data *const urng_data, RNG_data *const
     yaml_event_delete(&event);
     yaml_parser_delete(&parser);
     fclose(yaml_file);
+
+    // TODO: check whether values are valid e.g. MANT_BW must be < BY
+    // See Python prototype for some examples of sanity checks
+    // E.g. limit K to 48 bits or less (see main.c)
     return 0;
+}
+
+uint16_t yaml_parse_num_sections(const RngData *const rng_data)
+{
+    // Sum of two uint8_t will fit into uint16_t
+    return (uint16_t)(rng_data->GROWING_OCT + rng_data->DIMINISHING_OCT);
+}
+
+unsigned long yaml_parse_num_subsections(const RngData *const rng_data)
+{
+    if (rng_data->K > 32)
+    {
+        printf("rng_data->K too large to store subsection addr in 32 bit unsigned long\n");
+        exit(EXIT_FAILURE);
+    }
+    return 1UL << rng_data->K;
 }
 

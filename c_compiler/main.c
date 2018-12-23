@@ -1,24 +1,46 @@
 #include <stdio.h>
-#include "icdf.h"
+#include <unistd.h>
 #include "yaml_parse.h"
 #include "gen_vh.h"
+#include "gen_lookup.h"
 
 int main(int argc, char **argv) {
     int rtn = 0;
-    printf("\nStarting Newton to Verilog Compiler Backend...");
+    chdir(WORKING_DIR);
+
+    printf("\nStarting Newton to Verilog Compiler Backend...\n");
 
     /* Parse YAML file
      * Based on example by Andrew Poelstra, 2011
      * (https://www.wpsoftware.net/andrew/pages/libyaml.html)
      */
     const char filename[] = "privacy.yaml";
-    URNG_data urng_data;
-    RNG_data rng_data;
-    rtn += parse_yaml(filename, &urng_data, &rng_data);
+    UrngData urng_data;
+    RngData rng_data;
+    rtn += yaml_parse_parse(filename, &urng_data, &rng_data);
 
-    rtn += gen_urng_vh("verilog", &urng_data);
-    rtn += gen_rng_vh("verilog",&rng_data);
+    rtn += gen_vh_urng("verilog/urng.vh", &urng_data);
+    rtn += gen_vh_rng("verilog/rng.vh", &rng_data);
 
-    printf("\n");
+    /* Generate lookup table entries */
+    uint16_t num_sect = yaml_parse_num_sections(&rng_data);
+    unsigned long num_subsect = yaml_parse_num_subsections(&rng_data);
+    size_t len = (size_t)num_sect * num_subsect;
+
+    unsigned long long c0[len];  //WARNING: may overflow if K > 48 for 64 bit size_t
+    unsigned long long c1[len];  //WARNING: may overflow if K > 48 for 64 bit size_t
+    unsigned long long lookup_max_out;
+
+    rtn += gen_lookup_c0(&rng_data, c0, &lookup_max_out);
+    rtn += gen_lookup_c1(&rng_data, c0, lookup_max_out, c1);
+
+    rtn += gen_lookup_save_cx("verilog/c0.mem", c0, len);
+    rtn += gen_lookup_save_cx("verilog/c1.mem", c1, len);
+
+//    for(size_t i = 0; i < len; i++)
+//    {
+//        printf("%llu    %llu\n",c0[i], c1[i]);
+//    }
+
     return rtn;
 }

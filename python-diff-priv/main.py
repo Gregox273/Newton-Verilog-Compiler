@@ -112,9 +112,9 @@ class Rng:
         part = (rn >> (self.Bx - 2)) - symm
 
         if part:
-            max_exp = self.diminishing_oct
+            max_exp = self.diminishing_oct-1
         else:
-            max_exp = self.growing_oct
+            max_exp = self.growing_oct-1
 
         # Divide up the remaining bits
         exponent_part = self.get_exponent(rn)
@@ -177,8 +177,8 @@ class Rng:
             c1 = -c1
             x_coord = 1-x_coord
 
-        # if DEBUG:
-        #     plt.plot(x_coord, c0, 'r+')
+        if DEBUG:
+            plt.plot(x_coord, c0, 'r+')
 
         retval = c0 + c1 * (mant & 2**((self.mant_bw-self.k)-1))
         return retval
@@ -307,7 +307,7 @@ if __name__ == '__main__':
     # print("Floating point URNG output: {}".format(bin(rng.floating_point().to_int())))
 
     # Test RNG
-    rng = Rng(8, 16, 2, 3, 3, 2)
+    rng = Rng(8, 16, 2, 3, 4, 3)
     for i in range(0, 2**7):
         rn = rng.floating_point(i)
         rng.fake_lookup(rn.symm, rn.part, rn.exponent, rn.mantissa)

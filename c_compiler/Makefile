@@ -1,37 +1,43 @@
 # Based on examples from Swarthmore College:
 # https://www.cs.swarthmore.edu/~newhall/unixhelp/howto_makefiles.html
 
+include config.local
+
 CC = clang
 CXX = clang++
 
 CFLAGS = -g -Wall
-LFLAGS = -lm -lyaml
+LFLAGS = -lm -lyaml -lgsl -lgslcblas
 
 BUILDDIR = build
 
 CSRC = 	main.c \
 	icdf.c \
-	yaml_parse.c
+	yaml_parse.c \
+	gen_vh.c \
+	gen_lookup.c
 
-OBJS = $(CSRC:.c=.o)
+OBJS = $(CSRC:%.c=$(BUILDDIR)/%.o)
 
 MAIN = c_compiler
 
-all: $(MAIN)
+all: $(BUILDDIR) $(BUILDDIR)/$(MAIN)
+
+$(BUILDDIR)/%.o: %.c
+	$(CC) $(CFLAGS) -DWORKING_DIR=\"$(WD)\" -c $< -o $@
+
+
+$(BUILDDIR)/$(MAIN): $(OBJS)
+	$(CC) $(CFLAGS) $(LFLAGS) $^ -o $@
+
+
+$(BUILDDIR):
+	mkdir $@
 
 debug: CFLAGS += -O0
-debug: $(MAIN)
+debug: $(BUILDDIR)/$(MAIN)
 	gdb $(BUILDDIR)/$(MAIN)
 
-$(MAIN): $(OBJS)
-	$(CC) $(CFLAGS) $(LFLAGS) -o $(BUILDDIR)/$(MAIN) $(addprefix $(BUILDDIR)/,$(OBJS))
-
-.c.o: $(BUILDDIR)
-	$(CC) $(CFLAGS) -c $<  -o $(BUILDDIR)/$@
-	
-$(BUILDDIR):
-	mkdir $(BUILDDIR)	
-	
 .PHONY: clean
 clean:
 	rm -rf $(BUILDDIR)/*

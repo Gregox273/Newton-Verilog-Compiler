@@ -2,7 +2,7 @@
 # Gregory Brooks 2018/19
 
 URNG:
-  BX : 16  # Number of bits in URNG output
+  BX : 8  # Number of bits in URNG output
 
 # RNG based on work by de Schryver et al.:
 #  Christian de Schryver, Daniel Schmidt, Norbert Wehn, et al., “A Hardware Efficient Random Number Generator for
@@ -10,7 +10,7 @@ URNG:
 #  Article ID 675130, 11 pages, 2012.
 RNG:
   BY              : 16  # Number of bits in RNG output
-  K               : 4   # Number of bits used to represent subsection address in ICDF coefficient ROM
-  MANT_BW         : 8   # Number of bits in mantissa of floating point random number representation
-  GROWING_OCT     : 3   # Number of growing octave divisions used to divide up the ICDF
-  DIMINISHING_OCT : 2   # Number of diminishing octave divisions used to divide up the ICDF
+  K               : 2   # Number of bits used to represent subsection address in ICDF coefficient ROM
+  MANT_BW         : 3   # Number of bits in mantissa of floating point random number representation
+  GROWING_OCT     : 4   # Number of growing octave divisions used to divide up the ICDF
+  DIMINISHING_OCT : 3   # Number of diminishing octave divisions used to divide up the ICDF
