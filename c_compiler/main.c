@@ -3,6 +3,7 @@
 #include "yaml_parse.h"
 #include "gen_vh.h"
 #include "gen_lookup.h"
+#include "types.h"
 
 int main(int argc, char **argv) {
     int rtn = 0;
@@ -23,13 +24,13 @@ int main(int argc, char **argv) {
     rtn += gen_vh_rng("verilog/rng.vh", &rng_data);
 
     /* Generate lookup table entries */
-    uint16_t num_sect = yaml_parse_num_sections(&rng_data);
-    unsigned long num_subsect = yaml_parse_num_subsections(&rng_data);
+    section_t num_sect = yaml_parse_num_sections(&rng_data);
+    subsection_t num_subsect = yaml_parse_num_subsections(&rng_data);
     size_t len = (size_t)num_sect * num_subsect;
 
-    unsigned long long c0[len];  //WARNING: may overflow if K > 48 for 64 bit size_t
-    unsigned long long c1[len];  //WARNING: may overflow if K > 48 for 64 bit size_t
-    unsigned long long lookup_max_out;
+    by_t c0[len];  //WARNING: may overflow if K > 48 for 64 bit size_t
+    by_t c1[len];  //WARNING: may overflow if K > 48 for 64 bit size_t
+    by_t lookup_max_out;
 
     rtn += gen_lookup_c0(&rng_data, c0, &lookup_max_out);
     rtn += gen_lookup_c1(&rng_data, c0, lookup_max_out, c1);

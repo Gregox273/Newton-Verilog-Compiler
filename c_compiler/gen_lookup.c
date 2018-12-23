@@ -6,8 +6,7 @@
 #include "icdf.h"
 #include "yaml_parse.h"
 
-
-int gen_lookup_c0(const RngData *rng_data, unsigned long long *buffer, unsigned long long *max_out)
+int gen_lookup_c0(const RngData *rng_data, by_t *buffer, by_t *max_out)
 {
     if (rng_data->BY > 64)
     {
@@ -15,8 +14,8 @@ int gen_lookup_c0(const RngData *rng_data, unsigned long long *buffer, unsigned 
         exit(EXIT_FAILURE);
     }
 
-    uint16_t num_sect = yaml_parse_num_sections(rng_data);
-    unsigned long num_subsect = yaml_parse_num_subsections(rng_data);
+    section_t num_sect = yaml_parse_num_sections(rng_data);
+    subsection_t num_subsect = yaml_parse_num_subsections(rng_data);
 
     /* ICDF parameters */
     double mu = 0.0;
@@ -32,16 +31,16 @@ int gen_lookup_c0(const RngData *rng_data, unsigned long long *buffer, unsigned 
 
     double max_abs = 0.0 - icdf_laplace_double(min_x_coord, mu, b);
 
-    if(rng_data->BY - 1 - ceil(log2(max_abs)) >= 8*sizeof(int))
+    if(rng_data->BY - 1 - ceil(log2(max_abs)) >= 8*sizeof(scale_t))
     {
         printf("scale_exp is too large to store in int\n");
         exit(EXIT_FAILURE);
     }
 
-    int scale_exp = rng_data->BY - 1 - (int)ceil(log2(max_abs));
+    scale_t scale_exp = rng_data->BY - 1 - (scale_t)ceil(log2(max_abs));
     *max_out = icdf_laplace_ull(min_x_coord, mu, b, scale_exp);
 
-    for(uint16_t section = 0; section < num_sect; section++)
+    for(section_t section = 0; section < num_sect; section++)
     {
         double octave_width;
         double octave_bound;
@@ -58,13 +57,13 @@ int gen_lookup_c0(const RngData *rng_data, unsigned long long *buffer, unsigned 
         {
             // Final section has same width as penultimate section
             part = true;
-            uint16_t exp = section - rng_data->GROWING_OCT;
+            section_t exp = section - rng_data->GROWING_OCT;
             octave_width = 1.0 / (1 << (exp + 2));
             octave_bound = 0.5 - octave_width; // Lower bound
         }
         else
         {
-            uint16_t exp = section;
+            section_t exp = section;
             part = false;
             if(section >= rng_data->GROWING_OCT)
             {
@@ -84,7 +83,7 @@ int gen_lookup_c0(const RngData *rng_data, unsigned long long *buffer, unsigned 
             }
         }
 
-        for(unsigned long subsection = 0; subsection < num_subsect; subsection++)
+        for(subsection_t subsection = 0; subsection < num_subsect; subsection++)
         {
             /* Calculate c0 from ICDF for each subsection boundary in the section */
             double subsection_width = octave_width / num_subsect;
@@ -106,9 +105,9 @@ int gen_lookup_c0(const RngData *rng_data, unsigned long long *buffer, unsigned 
     return 0;
 }
 
-int gen_lookup_c1(const RngData *rng_data, unsigned long long *c0, unsigned long long max_out, unsigned long long *c1)
+int gen_lookup_c1(const RngData *rng_data, by_t *c0, by_t max_out, by_t *c1)
 {
-    unsigned long num_subsect = yaml_parse_num_subsections(rng_data);
+    subsection_t num_subsect = yaml_parse_num_subsections(rng_data);
     size_t len = (size_t) yaml_parse_num_sections(rng_data) * num_subsect;
     uint8_t remaining_mant_bits = rng_data->MANT_BW - rng_data->K;
 
@@ -117,7 +116,7 @@ int gen_lookup_c1(const RngData *rng_data, unsigned long long *c0, unsigned long
         if(i == rng_data->GROWING_OCT * num_subsect - 1)
         {
             // Subsection containing zero asymptote
-            c1[i] = (unsigned long long)round((double)(max_out - c0[i])/((1 << remaining_mant_bits) - 1));
+            c1[i] = (by_t)round((double)(max_out - c0[i])/((1 << remaining_mant_bits) - 1));
         }
         else if(i == rng_data->GROWING_OCT * num_subsect)
         {
@@ -138,7 +137,7 @@ int gen_lookup_c1(const RngData *rng_data, unsigned long long *c0, unsigned long
     return 0;
 }
 
-int gen_lookup_save_cx(const char *const filename, unsigned long long *cx, size_t len)
+int gen_lookup_save_cx(const char *const filename, by_t *cx, size_t len)
 {
     int rtn = 0;
     FILE *file = fopen(filename,"w");

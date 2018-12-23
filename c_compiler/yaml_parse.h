@@ -2,7 +2,7 @@
 #define _YAML_PARSE_H_
 
 #include <stdint.h>
-
+#include "types.h"
 
 typedef struct
 {
@@ -30,12 +30,12 @@ int yaml_parse_parse(const char *filename, UrngData *const urng_data, RngData *c
  *
  * rng_data -- pointer to RNG data struct
  */
-uint16_t yaml_parse_num_sections(const RngData *const rng_data);
+section_t yaml_parse_num_sections(const RngData *const rng_data);
 
 /* Calculate number of subsections based on RNG data from YAML file
  *
  * rng_data -- pointer to RNG data struct
  */
-unsigned long yaml_parse_num_subsections(const RngData *const rng_data);
+subsection_t yaml_parse_num_subsections(const RngData *const rng_data);
 
 #endif // _YAML_PARSE_H_

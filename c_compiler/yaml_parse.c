@@ -236,15 +236,15 @@ int yaml_parse_parse(const char *filename, UrngData *const urng_data, RngData *c
     return 0;
 }
 
-uint16_t yaml_parse_num_sections(const RngData *const rng_data)
+section_t yaml_parse_num_sections(const RngData *const rng_data)
 {
     // Sum of two uint8_t will fit into uint16_t
-    return (uint16_t)(rng_data->GROWING_OCT + rng_data->DIMINISHING_OCT);
+    return (section_t)(rng_data->GROWING_OCT + rng_data->DIMINISHING_OCT);
 }
 
-unsigned long yaml_parse_num_subsections(const RngData *const rng_data)
+subsection_t yaml_parse_num_subsections(const RngData *const rng_data)
 {
-    if (rng_data->K > 32)
+    if (rng_data->K > 8*sizeof(subsection_t))
     {
         printf("rng_data->K too large to store subsection addr in 32 bit unsigned long\n");
         exit(EXIT_FAILURE);

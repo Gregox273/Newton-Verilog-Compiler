@@ -16,14 +16,14 @@ double icdf_laplace_double(double p, double mu, double b)
     }
 }
 
-unsigned long long icdf_laplace_ull(double p, double mu, double b, int scale_exp)
+by_t icdf_laplace_ull(double p, double mu, double b, scale_t scale_exp)
 {
     if(scale_exp >= 0)
     {
-        return (unsigned long long)round((1ULL << scale_exp) * (0.0 - icdf_laplace_double(p, mu, b)));
+        return (by_t)round((1ULL << scale_exp) * (0.0 - icdf_laplace_double(p, mu, b)));
     }
     else
     {
-        return (unsigned long long)round((0.0 - icdf_laplace_double(p, mu, b)) / (1ULL << (0-scale_exp)));
+        return (by_t)round((0.0 - icdf_laplace_double(p, mu, b)) / (1ULL << (0-scale_exp)));
     }
 }
