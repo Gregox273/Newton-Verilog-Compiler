@@ -18,6 +18,7 @@ import itertools
 from bitarray import bitarray
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 
 DEBUG = True
 
@@ -46,6 +47,119 @@ class RandFloat:
         bits |= (self.part << self.m - 2)
         bits |= (self.symm << self.m - 1)
         return bits
+
+
+class CxLookup:
+    """Laplace distribution ICDF lookup (simulate ROM on FPGA)"""
+    def __init__(self, rng_data):
+        self.num_sect = rng_data.growing_oct + rng_data.diminishing_oct
+        self.num_subsect = 2**rng_data.k
+        length = self.num_sect * self.num_subsect
+
+        mu = 0
+        b = 1
+        self.k = rng_data.k
+
+        remaining_mant_bits = rng_data.mant_bw - rng_data.k
+
+        self.c0 = [0]*length
+        self.c1 = [0]*length
+
+        # First generate c0
+        # Smallest division within smallest subsection for part = false
+        min_x_coord = (1 / 2**(rng_data.growing_oct + 1))  # Octave width
+        min_x_coord /= self.num_subsect  # Subsection width
+        min_x_coord /= 2**remaining_mant_bits  # Mantissa division width
+
+        max_abs = 0 - self.icdf_laplace_double(min_x_coord)
+        scale_exp = rng_data.By - 1 - math.ceil(math.log2(max_abs))
+        max_out = self.icdf_laplace_int(min_x_coord, scale_exp, mu, b)
+
+        for section in range(0, self.num_sect):
+            part = False
+
+            if section == rng_data.growing_oct - 1:
+                # Section closest to zero is same width as the one after
+                part = False
+                octave_width = 2**(-(section + 2))
+                octave_bound = octave_width  # Upper bound
+            elif section == self.num_sect - 1:
+                part = True
+                exp = section - rng_data.growing_oct
+                octave_width = 2**(-(exp + 2))
+                octave_bound = 0.5 - octave_width  # Lower bound
+            else:
+                exp = section
+                part = False
+
+                if section >= rng_data.growing_oct:
+                    exp -= rng_data.growing_oct
+                    part = True
+
+                octave_width = 2**(-(exp + 3))
+                if part:
+                    octave_bound = 0.5 - 2**(-(exp + 2))  # Lower bound
+                else:
+                    octave_bound = 2**(-(exp + 2))  # Upper bound
+
+            for subsection in range(0, self.num_subsect):
+                # Calculate c0 from ICDF for each subsection boundary in the section
+                subsection_width = octave_width / self.num_subsect
+                if part:
+                    x_coord = octave_bound + (subsection + 1) * subsection_width
+                else:
+                    x_coord = octave_bound - subsection * subsection_width
+
+                index = self.addr(section, subsection)
+                self.c0[index] = self.icdf_laplace_int(x_coord, scale_exp, mu, b)
+                if DEBUG:
+                    plt.plot(x_coord, -self.c0[index], 'r+')
+
+        # Now generate c1
+        for i in range(0, length):
+            if i == rng_data.growing_oct * self.num_subsect - 1:
+                # Subsection containing zero asymptote
+                self.c1[i] = round((max_out - self.c0[i]) / (2**remaining_mant_bits - 1))
+            elif i == rng_data.growing_oct * self.num_subsect:
+                # First subsection in part == 1 region
+                self.c1[i] = (self.c0[0] - self.c0[i]) / 2**remaining_mant_bits
+            elif i < rng_data.growing_oct * self.num_subsect:
+                # Default for part == 0
+                self.c1[i] = (self.c0[i+1] - self.c0[i]) / 2**remaining_mant_bits
+            else:
+                # Default for part == 1
+                self.c1[i] = (self.c0[i-1] - self.c0[i]) / 2**remaining_mant_bits
+
+    @staticmethod
+    def icdf_laplace_double(p, mu=0, b=1):
+        """Inverse cumulative distribution function for Laplace distribution
+        p  -- function input
+        mu -- mean of Laplace distribution
+        b  -- Laplace distribution scale parameter"""
+        return mu - b * np.sign(p - 0.5) * np.log(1 - 2 * abs(p - 0.5))
+
+    def icdf_laplace_int(self, p, scale_exp, mu=0, b=1):
+        """Quantised absolute value of ICDF for Laplace distribution
+
+        p         -- function input
+        mu        -- mean of Laplace distribution
+        b         -- Laplace distribution scale parameter
+        scale_exp -- Quantisation step = 2**-scale_exp"""
+        return round(2**scale_exp * abs(self.icdf_laplace_double(p, mu, b)))
+
+    def addr(self, section, subsection):
+        return section * 2**self.k + subsection
+
+    def lookup(self, section, subsection, select):
+        if select:
+            return self.c1[self.addr(section, subsection)]
+        else:
+            return self.c0[self.addr(section, subsection)]
+
+    def interpolate(self, section, subsection, mant_lsbs):
+        c_0 = self.lookup(section, subsection, False)
+        c_1 = self.lookup(section, subsection, True)
+        return c_0 + c_1 * mant_lsbs
 
 
 class Rng:
@@ -148,40 +262,16 @@ class Rng:
         part -- part bit
         exp  -- exponent bits
         mant -- mantissa bits"""
-        # if part:
-        #     offset = self.growing_oct * 2**self.k
-        # else:
-        #     offset = 0
-        # section_addr = offset + exp
+        table = CxLookup(self)
+        if part:
+            offset = self.growing_oct
+        else:
+            offset = 0
+
+        section_addr = offset + exp
         subsection_addr = mant >> (self.mant_bw - self.k)
 
-        octave_width = 1 / (2 ** (exp + 3))
-        subsection_width = octave_width / 2**self.k
-        # Bound a is the greater bound
-        if part:
-            octave_bound_b = 0.5 - 1 / (2 ** (exp + 2))
-            # octave_bound_a = octave_bound_b + octave_width
-        else:
-            octave_bound_a = 1 / (2 ** (exp + 2))
-            octave_bound_b = octave_bound_a - octave_width
-
-        x_coord = octave_bound_b + subsection_addr * subsection_width
-        x_coord_next = x_coord + subsection_width
-
-        c0 = np.round(self.laplace_inv_cdf(x_coord)/self.quantisation_step)  # * self.quantisation_step to normalise
-        c0_next = np.round(self.laplace_inv_cdf(x_coord_next)/self.quantisation_step)  # * self.quantisation_step to normalise
-        c1 = (c0_next - c0)/subsection_width
-
-        if symm:
-            c0 = -c0
-            c1 = -c1
-            x_coord = 1-x_coord
-
-        if DEBUG:
-            plt.plot(x_coord, c0, 'r+')
-
-        retval = c0 + c1 * (mant & 2**((self.mant_bw-self.k)-1))
-        return retval
+        return table.interpolate(section_addr, subsection_addr, mant & 2**((self.mant_bw-self.k)-1))
 
     @staticmethod
     def laplace_inv_cdf(p, mu=0, b=1):
@@ -280,7 +370,7 @@ class Sensor(HardwareSensor):
 
         if self.budget > privacy_loss:
             self.budget -= privacy_loss
-            Invariant.read_bitfield[ID] = 1
+            Invariant.read_bitfield[self.id] = 1
             true_measurement = super().read()
             self.prev_return_value = true_measurement + noise
             return self.prev_return_value
@@ -298,7 +388,7 @@ class Sensor(HardwareSensor):
             self.budget += budget_increase
         else:
             self.budget = self.budget_max
-            Invariant.read_bitfield[ID] = 0
+            Invariant.read_bitfield[self.id] = 0
 
 
 if __name__ == '__main__':

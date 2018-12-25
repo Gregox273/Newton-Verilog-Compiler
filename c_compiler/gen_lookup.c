@@ -125,12 +125,12 @@ int gen_lookup_c1(const RngData *rng_data, by_t *c0, by_t max_out, by_t *c1)
         }
         else if(i < rng_data->GROWING_OCT * num_subsect)
         {
-            // Default for part = 0
+            // Default for part == 0
             c1[i] = (c0[i+1] - c0[i]) >> remaining_mant_bits;
         }
         else
         {
-            // Default for part = 1
+            // Default for part == 1
             c1[i] = (c0[i-1] - c0[i]) >> remaining_mant_bits;
         }
     }
