@@ -22,7 +22,7 @@ module clz_encode(
                     p_out = 1'b1;
                   end
         default : begin
-                    v_out = 2'b1;
+                    v_out = 1'b1;
                     p_out = 1'b0;
                   end
     endcase
@@ -38,7 +38,7 @@ module clz_merge_N(
   output [0:bits_out-1] pg);
 
   parameter N = 4;
-  parameter bits_out = `CLOG2(N);
+  localparam bits_out = `CLOG2(N);
 
   always@* begin
     vg = vl | vr;
@@ -49,7 +49,7 @@ module clz_merge_N(
       pg = {1,pr};
     end
   end
-endmodule  // clz_merge
+endmodule  // clz_merge_N
 
 module clz(
   input [bits_in-1:0] in,
@@ -57,8 +57,8 @@ module clz(
   output valid);
 
   parameter half_bits_in = 2;
-  parameter bits_in = 2*half_bits_in;
-  parameter bits_out = `CLOG2(bits_in);
+  localparam bits_in = 2*half_bits_in;
+  localparam bits_out = `CLOG2(bits_in);
 
   // Generate the necessary wires
   genvar i_wN;
