@@ -63,10 +63,10 @@ module clz_tb;
   wire valid;
 
   parameter half_bits_in = 8;
-  localparam bits_in = 16;
-  localparam bits_out = 4;
+  parameter bits_in = 16;
+  parameter bits_out = 4;
 
-  clz #(.half_bits_in({half_bits_in})) TI (  // Test Instance
+  clz #(.bits_in({bits_in})) TI (  // Test Instance
     .in(in),
     .out(out),
     .valid(valid)

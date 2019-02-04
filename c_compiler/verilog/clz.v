@@ -6,6 +6,13 @@
 `include "utils.vh"
 //`include "rng.vh"
 
+/*
+ * Two-bit LZD unit
+ *
+ * in    -- input pattern
+ * v_out -- valid bit
+ * p_out -- position bit
+ */
 module clz_encode(
   input [1:0] in,
   output v_out,
@@ -26,9 +33,21 @@ module clz_encode(
                     p_out = 1'b0;
                   end
     endcase
-
 endmodule  // clz_encode
 
+/*
+ * N-bit layer of LZD hierarchy
+ *
+ * vl -- left valid input
+ * vr -- right valid input
+ * pl -- left position input
+ * pr -- right position input
+ *
+ * vg -- output valid bit
+ * pg -- output position bits
+ *
+ * N  -- dimension of this hierarchical layer (output has width log2(N))
+ */
 module clz_merge_N(
   input vl,
   input vr,
@@ -51,13 +70,23 @@ module clz_merge_N(
   end
 endmodule  // clz_merge_N
 
+/*
+ * Leading zero counter
+ *
+ * in      -- input (bits to count)
+ *
+ * out     -- count output
+ * valid   -- output valid bit (invalid if overflow)
+ *
+ * bits_in -- bit width of input
+ */
 module clz(
   input [bits_in-1:0] in,
   output [bits_out-1:0] out,
   output valid);
 
-  parameter half_bits_in = 2;
-  localparam bits_in = 2*half_bits_in;
+  parameter bits_in = 4;
+  localparam half_bits_in = 0.5*bits_in;
   localparam bits_out = `CLOG2(bits_in);
 
   // Generate the necessary wires
@@ -71,9 +100,6 @@ module clz(
 
   assign valid = lzd_wN[bits_out-1].v[0];
   assign out = lzd_wN[bits_out-1].p;
-  // for (i = 0; i < bits_out; i = i + 1) begin
-  //   assign out[bits_out - i - 1] = lzd_wN[bits_out-1].p[i];
-  // end
 
   // Generate 2 bit leading zero detectors
   genvar i_lzd2;
@@ -103,6 +129,4 @@ module clz(
       end
     end
   endgenerate
-
-
 endmodule  // clz
