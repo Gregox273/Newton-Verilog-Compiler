@@ -8,11 +8,12 @@ AUTOGEN = urng.vh \
         rng.vh \
         c0.mem \
         c1.mem
+VERILOG_SRCS = $(wildcard *.v)
 
 all: $(BUILDDIR) $(BUILDDIR)/$(MAIN)
 
-$(BUILDDIR)/%.blif: %.v $(AUTOGEN)
-	yosys -p "synth_ice40 -blif $@" $<
+$(BUILDDIR)/%.blif: %.v $(AUTOGEN) $(VERILOG_SRCS)
+	yosys -p "synth_ice40 -blif $@" $(VERILOG_SRCS)
 
 $(AUTOGEN): $(EXECUTABLE)
 	./../build/c_compiler
