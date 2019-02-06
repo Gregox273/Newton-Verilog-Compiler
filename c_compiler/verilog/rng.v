@@ -31,10 +31,10 @@ module rng_uniform_to_float(
 		end
 	end
 
-	clz #(.half_bits_in(EXP_BW/2)) count_leading_zeros (
-		.in(uniform[BX - 3 : MANT_BW]),
-		.out(clz_out[`CLOG2(EXP_BW)-1:0]),
-		.valid(~clz_out[`CLOG2(EXP_BW)])
+	clz #(.bits_in(EXP_BW)) count_leading_zeros (
+		.b(uniform[BX - 3 : MANT_BW]),
+		.pout(clz_out[`CLOG2(EXP_BW)-1:0]),
+		.vout(~clz_out[`CLOG2(EXP_BW)])
 	);
 
 	// always@(clz_out) begin

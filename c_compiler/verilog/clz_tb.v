@@ -67,9 +67,9 @@ module clz_tb;
   parameter bits_out = 4;
 
   clz #(.bits_in({bits_in})) TI (  // Test Instance
-    .in(in),
-    .out(out),
-    .valid(valid)
+    .b(in),
+    .pout(out),
+    .vout(valid)
   );
 
   initial begin
