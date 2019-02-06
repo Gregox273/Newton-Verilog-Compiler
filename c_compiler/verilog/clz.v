@@ -24,16 +24,16 @@ module clz_encode(
   always@*
     case(in)
         2'b00   : begin
-                    v_out = 1'b0;
-                    p_out = 1'b0;
+                    v_out <= 1'b0;
+                    p_out <= 1'b0;
                   end
         2'b01   : begin
-                    v_out = 1'b1;
-                    p_out = 1'b1;
+                    v_out <= 1'b1;
+                    p_out <= 1'b1;
                   end
         default : begin
-                    v_out = 1'b1;
-                    p_out = 1'b0;
+                    v_out <= 1'b1;
+                    p_out <= 1'b0;
                   end
     endcase
 endmodule  // clz_encode
@@ -62,12 +62,12 @@ module clz_merge_N(
   parameter bits_out = 2;
 
   always@* begin
-    vg = vl | vr;
+    vg <= vl | vr;
     if (vl == 1) begin
-      pg = {0,pl};
+      pg <= {0,pl};
     end else begin
       // vr == 1 or vg == 0 so don't care
-      pg = {1,pr};
+      pg <= {1,pr};
     end
   end
 endmodule  // clz_merge_N
@@ -84,13 +84,19 @@ endmodule  // clz_merge_N
  * N            -- index of this hierarchical layer
  */
 module clz_layer_N(
-  input vin[0:half_bits_in/(2**(N-1))-1],
-  input [0:N-1] pin[0:half_bits_in/(2**(N-1))-1],
-  output vout[0:half_bits_in/(2**N)-1],
-  output [0:N] pout[0:half_bits_in/(2**N)-1]);
+  input [0 +: num_vin] vin,
+  input [0 +: num_pin] pin,
+  output [0 +: num_vout] vout,
+  output [0 +: num_pout] pout);
 
   parameter half_bits_in = 4;
   parameter N = 1;
+  localparam  Nx = half_bits_in/(2**N);  // Number of units in layer
+  localparam num_vin = half_bits_in/(2**(N-1));
+  localparam num_pin = N*num_vin;
+  localparam num_vout = half_bits_in/(2**N);
+  localparam num_pout = (N+1)*half_bits_in/(2**N);
+  // N position bits in, N+1 position bits out
 
   /*
    * Generate LZD units within the layer
@@ -99,14 +105,14 @@ module clz_layer_N(
    */
   genvar i_Nx;
   generate
-    for(i_Nx = 0; i_Nx < half_bits_in/(2**N); i_Nx = i_Nx + 1) begin : lzd_layer_N
+    for(i_Nx = 0; i_Nx < Nx; i_Nx = i_Nx + 1) begin : lzd_layer_N
       clz_merge_N #(.bits_out(N+1)) clz_Nx (
         .vl(vin[i_Nx*2]),
         .vr(vin[i_Nx*2+1]),
-        .pl(pin[i_Nx*2]),
-        .pr(pin[i_Nx*2+1]),
+        .pl(pin[i_Nx*2*N +: N]),
+        .pr(pin[i_Nx*2*N+N +: N]),
         .vg(vout[i_Nx]),
-        .pg(pout[i_Nx])
+        .pg(pout[i_Nx*(N+1) +: N+1])
       );
     end
   endgenerate
@@ -170,15 +176,40 @@ module clz(
     end
   endgenerate
 
-  genvar i_N;
+  genvar i_N, i_Nx;  //  Layer index and index within the layer
   generate
     for(i_N = 1; i_N < bits_out; i_N = i_N + 1) begin : lzd_layer_N
+      localparam num_vin = half_bits_in/(2**(i_N-1));
+      localparam num_pin = (i_N-1)*(half_bits_in/(2**(i_N-1)));
+      localparam num_vout = half_bits_in/(2**i_N);
+      localparam num_pout = i_N*half_bits_in/(2**i_N);
+      wire [0 +: num_vin] vin;
+      wire [0 +: num_pin] pin;
+      wire [0 +: num_vout] vout;
+      wire [0 +: num_pout] pout;
+
+      for(i_Nx = 0; i_Nx < num_vin; i_Nx = i_Nx + 1) begin : lzd_layer_N_vin_x
+        assign lzd_layer_N[i_N].vin[i_Nx] = lzd_wN[i_N-1].v[i_Nx];
+      end
+
+      for(i_Nx = 0; i_Nx < num_pin; i_Nx = i_Nx + 1) begin : lzd_layer_N_pin_x
+        assign pin[i_Nx] = lzd_wN[i_N-1].p[i_Nx];
+      end
+
+      for(i_Nx = 0; i_Nx < num_vout; i_Nx = i_Nx + 1) begin : lzd_layer_N_vout_x
+        assign vout[i_Nx] = lzd_wN[i_N].v[i_Nx];
+      end
+
+      for(i_Nx = 0; i_Nx < num_pout; i_Nx = i_Nx + 1) begin : lzd_layer_N_pout_x
+        assign pin[i_Nx] = lzd_wN[i_N].p[i_Nx];
+      end
+
       clz_layer_N #(.half_bits_in(half_bits_in),
                     .N(i_N)) clz_N (
-        .vin(lzd_wN[i_N-1].v),
-        .pin(lzd_wN[i_N-1].p),
-        .vout(lzd_wN[i_N].v),
-        .pout(lzd_wN[i_N].p)
+        .vin(vin),
+        .pin(pin),
+        .vout(vout),
+        .pout(pout)
         );
     end
   endgenerate
