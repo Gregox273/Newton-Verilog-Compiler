@@ -39,7 +39,7 @@ module clz_encode(
 endmodule  // clz_encode
 
 /*
- * N-bit layer of LZD hierarchy
+ * N bit LZD unit
  *
  * vl -- left valid input
  * vr -- right valid input
@@ -71,6 +71,46 @@ module clz_merge_N(
     end
   end
 endmodule  // clz_merge_N
+
+/*
+ * Nth layer of LZD circuit
+ *
+ * vin  -- input valid bits
+ * pin  -- input position bits
+ * vout -- output valid bits
+ * pout -- output position bits
+ *
+ * half_bits_in -- 0.5 * number of input bits to the LZD circuit
+ * N            -- index of this hierarchical layer
+ */
+module clz_layer_N(
+  input vin[0:half_bits_in/(2**(N-1))-1],
+  input [0:N-1] pin[0:half_bits_in/(2**(N-1))-1],
+  output vout[0:half_bits_in/(2**N)-1],
+  output [0:N] pout[0:half_bits_in/(2**N)-1]);
+
+  parameter half_bits_in = 4;
+  parameter N = 1;
+
+  /*
+   * Generate LZD units within the layer
+   *
+   *i_Nx -- index of unit within the layer
+   */
+  genvar i_Nx;
+  generate
+    for(i_Nx = 0; i_Nx < half_bits_in/(2**N); i_Nx = i_Nx + 1) begin : lzd_layer_N
+      clz_merge_N #(.bits_out(N+1)) clz_Nx (
+        .vl(vin[i_Nx*2]),
+        .vr(vin[i_Nx*2+1]),
+        .pl(pin[i_Nx*2]),
+        .pr(pin[i_Nx*2+1]),
+        .vg(vout[i_Nx]),
+        .pg(pout[i_Nx])
+      );
+    end
+  endgenerate
+endmodule  // clz_layer_N
 
 /*
  * Leading zero counter
@@ -130,36 +170,49 @@ module clz(
     end
   endgenerate
 
-  /* Generate N bit lzd blocks
-  *
-  * i_N  -- hierarchical layer being generated
-  * i_Nx -- index of module within hierarchical layer i_N
-  */
-  genvar i_N, i_Nx;
+  genvar i_N;
   generate
-    for(i_N = 1; i_N < bits_out; i_N = i_N + 1) begin : lzd_N
-      for(i_Nx = 0; i_Nx < half_bits_in/(2**i_N); i_Nx = i_Nx + 1) begin : lzd_Nx
-        if(i_N == 1) begin
-          clz_merge_N #(.bits_out(i_N+1)) clz_Nx (  // 2**(I_N+1)
-            .vl(lzd_wN[i_N-1].v[2*i_Nx]),
-            .vr(lzd_wN[i_N-1].v[2*i_Nx+1]),
-            .pl(lzd_wN[i_N-1].p[2*i_N*i_Nx]),
-            .pr(lzd_wN[i_N-1].p[2*i_N*i_Nx + i_N]),
-            .vg(lzd_wN[i_N].v[i_Nx]),
-            .pg(lzd_wN[i_N].p[(i_N+1)*i_Nx : (i_N+1)*(i_Nx+1)-1])
-          );
-        end
-        else begin
-          clz_merge_N #(.N(i_N+1)) clz_Nx (  // 2**(I_N+1)
-            .vl(lzd_wN[i_N-1].v[2*i_Nx]),
-            .vr(lzd_wN[i_N-1].v[2*i_Nx+1]),
-            .pl(lzd_wN[i_N-1].p[(2*i_N*i_Nx) : (2*i_N*i_Nx + i_N - 1)]),
-            .pr(lzd_wN[i_N-1].p[2*i_N*i_Nx + i_N : 2*i_N*i_Nx + 2*i_N - 1]),
-            .vg(lzd_wN[i_N].v[i_Nx]),
-            .pg(lzd_wN[i_N].p[(i_N+1)*i_Nx : (i_N+1)*(i_Nx+1)-1])
-          );
-        end
-      end
+    for(i_N = 1; i_N < bits_out; i_N = i_N + 1) begin : lzd_layer_N
+      clz_layer_N #(.half_bits_in(half_bits_in),
+                    .N(i_N)) clz_N (
+        .vin(lzd_wN[i_N-1].v),
+        .pin(lzd_wN[i_N-1].p),
+        .vout(lzd_wN[i_N].v),
+        .pout(lzd_wN[i_N].p)
+        );
     end
   endgenerate
+
+  // /* Generate N bit lzd blocks
+  // *
+  // * i_N  -- hierarchical layer being generated
+  // * i_Nx -- index of module within hierarchical layer i_N
+  // */
+  // genvar i_N, i_Nx;
+  // generate
+  //   for(i_N = 1; i_N < bits_out; i_N = i_N + 1) begin : lzd_N
+  //     for(i_Nx = 0; i_Nx < half_bits_in/(2**i_N); i_Nx = i_Nx + 1) begin : lzd_Nx
+  //       if(i_N == 1) begin
+  //         clz_merge_N #(.bits_out(i_N+1)) clz_Nx (  // 2**(I_N+1)
+  //           .vl(lzd_wN[i_N-1].v[2*i_Nx]),
+  //           .vr(lzd_wN[i_N-1].v[2*i_Nx+1]),
+  //           .pl(lzd_wN[i_N-1].p[2*i_N*i_Nx]),
+  //           .pr(lzd_wN[i_N-1].p[2*i_N*i_Nx + i_N]),
+  //           .vg(lzd_wN[i_N].v[i_Nx]),
+  //           .pg(lzd_wN[i_N].p[(i_N+1)*i_Nx : (i_N+1)*(i_Nx+1)-1])
+  //         );
+  //       end
+  //       else begin
+  //         clz_merge_N #(.N(i_N+1)) clz_Nx (  // 2**(I_N+1)
+  //           .vl(lzd_wN[i_N-1].v[2*i_Nx]),
+  //           .vr(lzd_wN[i_N-1].v[2*i_Nx+1]),
+  //           .pl(lzd_wN[i_N-1].p[(2*i_N*i_Nx) : (2*i_N*i_Nx + i_N - 1)]),
+  //           .pr(lzd_wN[i_N-1].p[2*i_N*i_Nx + i_N : 2*i_N*i_Nx + 2*i_N - 1]),
+  //           .vg(lzd_wN[i_N].v[i_Nx]),
+  //           .pg(lzd_wN[i_N].p[(i_N+1)*i_Nx : (i_N+1)*(i_Nx+1)-1])
+  //         );
+  //       end
+  //     end
+  //   end
+  // endgenerate
 endmodule  // clz
