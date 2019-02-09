@@ -13,7 +13,7 @@ VERILOG_SRCS = $(wildcard *.v)
 
 all: $(BUILDDIR) $(BUILDDIR)/$(MAIN)
 
-synthclz:
+synthclz: $(BUILDDIR)
 	yosys -p "synth_ice40 -top clz -blif $(BUILDDIR)/clz.blif" clz.v
 
 simclz: $(SIMDIR)
@@ -25,6 +25,15 @@ simclz_merge_n: $(SIMDIR)
 	iverilog -Wall -o $(SIMDIR)/clz_merge_N.vvp clz_merge_N_tb.v
 	vvp $(SIMDIR)/clz_merge_N.vvp -vcd $(SIMDIR)/clz_merge_N.vcd
 	gtkwave $(SIMDIR)/clz_merge_N.vcd
+
+
+synthrng: $(BUILDDIR)
+	yosys -p "synth_ice40 -top rng -blif $(BUILDDIR)/rng.blif" rng.v
+
+simrng: $(SIMDIR)
+	iverilog -Wall -o $(SIMDIR)/rng.vvp rng_tb.v
+	vvp $(SIMDIR)/rng.vvp -vcd $(SIMDIR)/rng.vcd
+	gtkwave $(SIMDIR)/rng.vcd
 
 $(BUILDDIR)/%.blif: %.v $(AUTOGEN) $(VERILOG_SRCS)
 	yosys -p "synth_ice40 -blif $@" $(VERILOG_SRCS)
