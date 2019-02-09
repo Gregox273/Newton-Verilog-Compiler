@@ -2,6 +2,7 @@
 # https://www.cs.swarthmore.edu/~newhall/unixhelp/howto_makefiles.html
 
 BUILDDIR = build
+SIMDIR = sim
 MAIN = rng.blif
 EXECUTABLE = ../build/c_compiler
 AUTOGEN = urng.vh \
@@ -11,6 +12,19 @@ AUTOGEN = urng.vh \
 VERILOG_SRCS = $(wildcard *.v)
 
 all: $(BUILDDIR) $(BUILDDIR)/$(MAIN)
+
+synthclz:
+	yosys -p "synth_ice40 -top clz -blif $(BUILDDIR)/clz.blif" clz.v
+
+simclz: $(SIMDIR)
+	iverilog -Wall -o $(SIMDIR)/clz.vvp clz_tb.v
+	vvp $(SIMDIR)/clz.vvp -vcd $(SIMDIR)/clz.vcd
+	gtkwave $(SIMDIR)/clz.vcd
+
+simclz_merge_n: $(SIMDIR)
+	iverilog -Wall -o $(SIMDIR)/clz_merge_N.vvp clz_merge_N_tb.v
+	vvp $(SIMDIR)/clz_merge_N.vvp -vcd $(SIMDIR)/clz_merge_N.vcd
+	gtkwave $(SIMDIR)/clz_merge_N.vcd
 
 $(BUILDDIR)/%.blif: %.v $(AUTOGEN) $(VERILOG_SRCS)
 	yosys -p "synth_ice40 -blif $@" $(VERILOG_SRCS)
@@ -22,6 +36,9 @@ $(EXECUTABLE):
 	make -C ..
 
 $(BUILDDIR):
+	mkdir $@
+
+$(SIMDIR):
 	mkdir $@
 
 .PHONY: clean

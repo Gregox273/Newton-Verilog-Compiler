@@ -18,22 +18,22 @@
  */
 module clz_encode(
   input [1:0] in,
-  output v_out,
-  output p_out);
+  output reg v_out,
+  output reg p_out);
 
   always@*
     case(in)
         2'b00   : begin
-                    v_out <= 1'b0;
-                    p_out <= 1'b0;
+                    v_out = 1'b0;
+                    p_out = 1'b0;
                   end
         2'b01   : begin
-                    v_out <= 1'b1;
-                    p_out <= 1'b1;
+                    v_out = 1'b1;
+                    p_out = 1'b1;
                   end
         default : begin
-                    v_out <= 1'b1;
-                    p_out <= 1'b0;
+                    v_out = 1'b1;
+                    p_out = 1'b0;
                   end
     endcase
 endmodule  // clz_encode
@@ -56,18 +56,18 @@ module clz_merge_N(
   input vr,
   input [0:bits_out-2] pl,
   input [0:bits_out-2] pr,
-  output vg,
-  output [0:bits_out-1] pg);
+  output reg vg,
+  output reg [0:bits_out-1] pg);
 
   parameter bits_out = 2;
 
   always@* begin
-    vg <= vl | vr;
+    vg = (vl || vr);
     if (vl == 1) begin
-      pg <= {0,pl};
+      pg = {1'b0,pl};
     end else begin
       // vr == 1 or vg == 0 so don't care
-      pg <= {1,pr};
+      pg = {1'b1,pr};
     end
   end
 endmodule  // clz_merge_N
@@ -84,29 +84,31 @@ endmodule  // clz_merge_N
  * N            -- index of this hierarchical layer
  */
 module clz(
-  input [0 +: bits_in] b,
+  input [0 : bits_in-1] b,
   output vout,
-  output [0 +: bits_out] pout);
+  output [0 : bits_out-1] pout);
 
   parameter bits_in = 8;
   localparam half_bits_in = bits_in/2;
   localparam bits_out = `CLOG2(bits_in);
 
+  wire [0 : bits_in/2 - 1] input_l, input_r;
   wire vl, vr;
-//  wire vr;
-  wire [0 +: bits_out-1] pl, pr;
-  //wire [0 +: bits_out-1] pr;
+  wire [0 : bits_out-2] pl, pr;
+
+  assign input_l = b[0 +: bits_in/2];
+  assign input_r = b[bits_in/2 +: bits_in/2];
 
   if(bits_out <= 2) begin
     // If this module must contain 2-bit encoders
     clz_encode clz_l (
-      .in(b[0 +: bits_in/2]),
+      .in(input_l),
       .v_out(vl),
       .p_out(pl)
     );
 
     clz_encode clz_r (
-      .in(b[bits_in/2 +: bits_in/2]),
+      .in(input_r),
       .v_out(vr),
       .p_out(pr)
     );
