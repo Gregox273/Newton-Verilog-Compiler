@@ -75,13 +75,11 @@ endmodule  // clz_merge_N
 /*
  * Nth layer of LZD circuit. Recursively build tree structure.
  *
- * vin  -- input valid bits
- * pin  -- input position bits
+ * b  -- input bits
  * vout -- output valid bits
  * pout -- output position bits
  *
- * half_bits_in -- 0.5 * number of input bits to the LZD circuit
- * N            -- index of this hierarchical layer
+ * bits_in -- number of input bits to the LZD circuit
  */
 module clz(
   input [0 : bits_in-1] b,
@@ -136,3 +134,55 @@ module clz(
     .pg(pout)
   );
 endmodule  // clz
+
+/*
+ * Clocked version of clz, used to reduce critical path length
+ * Store inputs on one clock edge, write output on the next
+ *
+ * ready -- rising edge signals outputs are ready, clocking subsequent modules
+ */
+module clz_clk(
+  input [0 : bits_in-1] b,
+  input clk,
+  input rst,
+  output reg vout,
+  output reg [0 : bits_out-1] pout,
+  output reg ready);
+
+  parameter bits_in = 8;
+  localparam bits_out = `CLOG2(bits_in);
+
+  reg [0 : bits_in-1] b_buf;
+  wire w_vout;
+  wire [0 : bits_out - 1] w_pout;
+
+  clz #(.bits_in(bits_in)) clz_combinational (
+    .b(b_buf),
+    .vout(w_vout),
+    .pout(w_pout)
+  );
+
+  always @(posedge clk or posedge rst) begin
+    if(rst) begin
+      vout <= 0;
+      pout <= 0;
+      ready <= 0;
+      b_buf <= 0;
+    end
+    else begin
+      case(ready)
+        1'b0: begin
+          // Read
+          b_buf <= b;
+        end
+        1'b1: begin
+          // Write
+          vout <= w_vout;
+          pout <= w_pout;
+        end
+      endcase
+      ready <= ~ready;
+    end
+  end
+
+endmodule  // clz_clk

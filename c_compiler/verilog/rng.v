@@ -7,9 +7,11 @@
 module rng_uniform_to_float(
 	input clk,
 	input rst,
+	input uniform_valid,
 	input [BX - 1:0] uniform,
 	output reg [BX - 1:0] floating,
-	output reg data_valid);
+	output reg data_valid,
+	output reg ready);
 
 	parameter BX = `URNG_BX;
 	parameter BY = `RNG_BY;
@@ -20,45 +22,62 @@ module rng_uniform_to_float(
 	parameter D_OCT = `RNG_DIMINISHING_OCT;
 
 	wire [`CLOG2(EXP_BW)-1:0] clz_out;
-	wire clz_valid;
+	wire clz_valid, clz_rdy;
 	wire [BX - MANT_BW - 2 : 0] exp_add_buf;
 	reg [`CLOG2(`MAX(G_OCT,D_OCT))-1:0] max_exp;
+	reg [BX - 1:0] uniform_buf;
+	reg [BX - 1:0] uniform_pipe;
 
 	//assign max_exp = ( == 1) ? D_OCT : G_OCT ;  // Depends on part bit
-	always@(uniform[BX - 2]) begin
-		if(uniform[BX - 2] == 1) begin
+	always@(uniform_pipe[BX - 2]) begin
+		if(uniform_pipe[BX - 2] == 1) begin
 			max_exp = D_OCT;
 		end else begin
 			max_exp = G_OCT;
 		end
 	end
 
-	clz #(.bits_in(EXP_BW)) count_leading_zeros (
-		.b(uniform[BX - 3 : MANT_BW]),
+	clz_clk #(.bits_in(EXP_BW)) count_leading_zeros (
+		.b(uniform_buf[BX - 3 : MANT_BW]),
+		.clk(clk),
+		.rst(rst),
 		.vout(clz_valid),
-		.pout(clz_out)
+		.pout(clz_out),
+		.ready(clz_rdy)
 	);
 
 	always@(posedge rst) begin
 		floating <= 0;
 		data_valid <= 0;
+		ready <= 0;
+		max_exp <= 0;
+		uniform_buf <= 0;
+		uniform_pipe <= 0;
 	end
 
-	always@(posedge clk)
-		// if (clz_valid == 1) begin
-		// 	floating[BX - 3 : MANT_BW] <= clz_out + floating[BX - 3 : MANT_BW];  // Exponent
-		// end else begin
-		//
-		// end
+	always@(posedge clz_rdy)
+		ready <= 0;  // antiphase with clz_rdy
+
 		if (floating[BX - 3 : MANT_BW] + clz_out > max_exp) begin
 			floating[BX - 3 : MANT_BW] <= max_exp;  // Exponent
 		end else begin
 			floating[BX - 3 : MANT_BW] <= floating[BX - 3 : MANT_BW] + clz_out;
 		end
-		floating[BX - 1] <= uniform[BX - 1];  // symm
-		floating[BX - 2] <= uniform[BX - 2];  // part
-		floating[MANT_BW-1:0] <= uniform[MANT_BW-1:0];  // mantissa
+		floating[BX - 1] <= uniform_pipe[BX - 1];  // symm
+		floating[BX - 2] <= uniform_pipe[BX - 2];  // part
+		floating[MANT_BW-1:0] <= uniform_pipe[MANT_BW-1:0];  // mantissa
 		data_valid <= clz_valid;
+		uniform_pipe <= uniform_buf;
+
+		// clz module ready for new input
+		if (uniform_valid) begin
+			// If new input is ready
+			uniform_buf <= uniform;
+		end
+	end
+
+	always @ ( negedge clz_rdy ) begin
+		ready <= 1;  // antiphase with clz_ready
 	end
 
 endmodule  // rng_uniform_to_float
@@ -113,9 +132,16 @@ module rng(
 		.valid(urng_valid)
 	);
 
+	// always @ ( posedge urng_valid[`URNG_BX-1] ) begin
+	// 	// New uniform random number is ready
+	// 	urng_out_buf <= urng_out;
+	// end
+
 	rng_uniform_to_float u_to_f(
-		.clk(urng_valid[`URNG_BX-1]),  // Convert uniform random number once it has been completely generated
+		//.clk(urng_valid[`URNG_BX-1]),  // Convert uniform random number once it has been completely generated
+		.clk(clk),
 		.rst(float_rst),
+		.uniform_valid(urng_valid[`URNG_BX-1]),
 		.uniform(urng_out),
 		.floating(float_out),
 		.data_valid(float_valid)

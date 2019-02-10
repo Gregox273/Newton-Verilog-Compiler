@@ -14,7 +14,7 @@ VERILOG_SRCS = $(wildcard *.v)
 all: $(BUILDDIR) $(BUILDDIR)/$(MAIN)
 
 synthclz: $(BUILDDIR)
-	yosys -p "synth_ice40 -top clz -blif $(BUILDDIR)/clz.blif" clz.v
+	yosys -p "synth_ice40 -top clz_clk -blif $(BUILDDIR)/clz.blif" clz.v
 
 simclz: $(SIMDIR)
 	iverilog -Wall -o $(SIMDIR)/clz.vvp clz_tb.v
