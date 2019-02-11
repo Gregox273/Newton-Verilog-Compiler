@@ -137,51 +137,35 @@ endmodule  // clz
 
 /*
  * Clocked version of clz, used to reduce critical path length
- * Store inputs on one clock edge, write output on the next
- *
- * ready -- rising edge signals outputs are ready, clocking subsequent modules
  */
 module clz_clk(
   input [0 : bits_in-1] b,
   input clk,
   input rst,
   output reg vout,
-  output reg [0 : bits_out-1] pout,
-  output reg ready);
+  output reg [0 : bits_out-1] pout
+  );
 
   parameter bits_in = 8;
   localparam bits_out = `CLOG2(bits_in);
 
-  reg [0 : bits_in-1] b_buf;
   wire w_vout;
   wire [0 : bits_out - 1] w_pout;
 
   clz #(.bits_in(bits_in)) clz_combinational (
-    .b(b_buf),
+    .b(b),
     .vout(w_vout),
     .pout(w_pout)
   );
 
-  always @(posedge clk or posedge rst) begin
+  always @(posedge clk) begin
     if(rst) begin
       vout <= 0;
       pout <= 0;
-      ready <= 0;
-      b_buf <= 0;
     end
     else begin
-      case(ready)
-        1'b0: begin
-          // Read
-          b_buf <= b;
-        end
-        1'b1: begin
-          // Write
-          vout <= w_vout;
-          pout <= w_pout;
-        end
-      endcase
-      ready <= ~ready;
+      vout <= w_vout;
+      pout <= w_pout;
     end
   end
 

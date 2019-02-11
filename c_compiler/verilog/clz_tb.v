@@ -22,8 +22,7 @@ module clz_tb;
     .clk(clk),
     .rst(rst),
     .pout(out),
-    .vout(valid),
-    .ready(ready)
+    .vout(valid)
   );
 
   // Reset then set up clock
@@ -38,26 +37,26 @@ module clz_tb;
   initial begin
     $dumpfile("sim/clz.vcd");
     $dumpvars;
-    $monitor("%d,\t%b,\t%b,\t%b,\t%b,\t%b",$time,clk,in,out,valid, ready);
+    $monitor("%d,\t%b,\t%b,\t%b,\t%b",$time,clk,in,out,valid);
 
     in = {bits_in{1'b0}};  // init
     @(negedge rst);  // wait for reset
-    repeat(2) @(posedge clk);
+    @(posedge clk);
     #delay
     in = {bits_in{1'b1}};
-    repeat(2) @(posedge clk);
+    @(posedge clk);
 
     #delay
     in = {{half_bits_in{1'b0}},{half_bits_in{1'b1}}};
-    repeat(2) @(posedge clk);
+    @(posedge clk);
 
     #delay
     in = {{half_bits_in{1'b1}},{half_bits_in{1'b0}}};
-    repeat(2) @(posedge clk);
+    @(posedge clk);
 
     #delay
     in = {{bits_in-1{1'b0}},1'b1};
-    repeat(4) @(posedge clk);
+    repeat(2) @(posedge clk);
     $finish;
   end
 endmodule  // clz_tb

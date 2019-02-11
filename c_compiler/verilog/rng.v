@@ -7,11 +7,10 @@
 module rng_uniform_to_float(
 	input clk,
 	input rst,
-	input uniform_valid,
 	input [BX - 1:0] uniform,
 	output reg [BX - 1:0] floating,
-	output reg data_valid,
-	output reg ready);
+	output reg data_valid
+	);
 
 	parameter BX = `URNG_BX;
 	parameter BY = `RNG_BY;
@@ -22,10 +21,9 @@ module rng_uniform_to_float(
 	parameter D_OCT = `RNG_DIMINISHING_OCT;
 
 	wire [`CLOG2(EXP_BW)-1:0] clz_out;
-	wire clz_valid, clz_rdy;
+	wire clz_valid;
 	wire [BX - MANT_BW - 2 : 0] exp_add_buf;
 	reg [`CLOG2(`MAX(G_OCT,D_OCT))-1:0] max_exp;
-	reg [BX - 1:0] uniform_buf;
 	reg [BX - 1:0] uniform_pipe;
 
 	//assign max_exp = ( == 1) ? D_OCT : G_OCT ;  // Depends on part bit
@@ -42,44 +40,30 @@ module rng_uniform_to_float(
 		.clk(clk),
 		.rst(rst),
 		.vout(clz_valid),
-		.pout(clz_out),
-		.ready(clz_rdy)
+		.pout(clz_out)
 	);
 
-	always@(posedge rst) begin
-		floating <= 0;
-		data_valid <= 0;
-		ready <= 0;
-		max_exp <= 0;
-		uniform_buf <= 0;
-		uniform_pipe <= 0;
-	end
-
-	always@(posedge clz_rdy)
-		ready <= 0;  // antiphase with clz_rdy
-
-		if (floating[BX - 3 : MANT_BW] + clz_out > max_exp) begin
-			floating[BX - 3 : MANT_BW] <= max_exp;  // Exponent
-		end else begin
-			floating[BX - 3 : MANT_BW] <= floating[BX - 3 : MANT_BW] + clz_out;
+	always@(posedge clk) begin
+		if (rst) begin
+			floating <= 0;
+			data_valid <= 0;
+			ready <= 0;
+			max_exp <= 0;
+			uniform_pipe <= 0;
 		end
-		floating[BX - 1] <= uniform_pipe[BX - 1];  // symm
-		floating[BX - 2] <= uniform_pipe[BX - 2];  // part
-		floating[MANT_BW-1:0] <= uniform_pipe[MANT_BW-1:0];  // mantissa
-		data_valid <= clz_valid;
-		uniform_pipe <= uniform_buf;
-
-		// clz module ready for new input
-		if (uniform_valid) begin
-			// If new input is ready
-			uniform_buf <= uniform;
+		else begin
+			uniform_pipe <= uniform;  // delay by one clock cycle to synchronise with clz module
+			if (floating[BX - 3 : MANT_BW] + clz_out > max_exp) begin
+				floating[BX - 3 : MANT_BW] <= max_exp;  // Exponent
+			end else begin
+				floating[BX - 3 : MANT_BW] <= floating[BX - 3 : MANT_BW] + clz_out;
+			end
+			floating[BX - 1] <= uniform_pipe[BX - 1];  // symm
+			floating[BX - 2] <= uniform_pipe[BX - 2];  // part
+			floating[MANT_BW-1:0] <= uniform_pipe[MANT_BW-1:0];  // mantissa
+			data_valid <= clz_valid;  // TODO: implement system to consume more random numbers if necessary (de Schryver et al)
 		end
 	end
-
-	always @ ( negedge clz_rdy ) begin
-		ready <= 1;  // antiphase with clz_ready
-	end
-
 endmodule  // rng_uniform_to_float
 
 module rng_lookup(
@@ -121,6 +105,7 @@ module rng(
 
 	wire urng_rst;
 	wire [BX-1:0] urng_out;
+	reg [BX-1:0] urng_out_buf;
 	wire [BX-1:0] urng_valid;
 	wire float_rst;
 	wire [BX-1:0] float_out;
@@ -143,6 +128,10 @@ module rng(
 		else if (urng_rst) begin
 			urng_rst <= 0;
 		end
+		else if (urng_valid[`URNG_BX-1]) begin
+			// New uniform random number is ready
+			urng_out_buf <= urng_out;
+		end
 	end
 
 	rng_uniform_to_float #(.BX(BX), .MANT_BW(MANT_BW)) u_to_f(
@@ -150,13 +139,14 @@ module rng(
 		.clk(clk),
 		.rst(float_rst),
 		.uniform_valid(urng_valid[BX-1]),
-		.uniform(urng_out),
+		.uniform(urng_out_buf),
 		.floating(float_out),
 		.data_valid(float_valid)
 	);
 
 	rng_lookup lookup(
-		.clk(read),
+		//.clk(read),
+		.clk(clk),
 		.section_addr(),[EXP_BW:0]
 		.subsection_addr(),[K-1:0]
 		.c0(c0),
