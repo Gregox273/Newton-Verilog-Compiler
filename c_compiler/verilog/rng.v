@@ -116,15 +116,18 @@ module rng(
 	input read
 	);
 
+	parameter BX = `URNG_BX;
+	parameter MANT_BW  = `RNG_MANT_BW;
+
 	wire urng_rst;
-	wire [`URNG_BX-1:0] urng_out;
-	wire [`URNG_BX-1:0] urng_valid;
+	wire [BX-1:0] urng_out;
+	wire [BX-1:0] urng_valid;
 	wire float_rst;
-	wire [`URNG_BX-1:0] float_out;
+	wire [BX-1:0] float_out;
 	wire float_valid;
 	reg [`RNG_BY - 1:0] c0, c1;
 
-	uniform_rng #(.N(`URNG_BX)) urng(
+	uniform_rng #(.N(BX)) urng(
 		.comparator_output(comparator_output),
 		.clk(clk),
 		.rst(urng_rst),
@@ -132,16 +135,21 @@ module rng(
 		.valid(urng_valid)
 	);
 
-	// always @ ( posedge urng_valid[`URNG_BX-1] ) begin
-	// 	// New uniform random number is ready
-	// 	urng_out_buf <= urng_out;
-	// end
+	always @ ( posedge clk ) begin
+		if (urng_valid[BX-1] && urng_out[BX - 3 : MANT_BW] == 0) begin
+			// Consume another random number if exponent part is zero
+			urng_rst <= 1;
+		end
+		else if (urng_rst) begin
+			urng_rst <= 0;
+		end
+	end
 
-	rng_uniform_to_float u_to_f(
-		//.clk(urng_valid[`URNG_BX-1]),  // Convert uniform random number once it has been completely generated
+	rng_uniform_to_float #(.BX(BX), .MANT_BW(MANT_BW)) u_to_f(
+		//.clk(urng_valid[BX-1]),  // Convert uniform random number once it has been completely generated
 		.clk(clk),
 		.rst(float_rst),
-		.uniform_valid(urng_valid[`URNG_BX-1]),
+		.uniform_valid(urng_valid[BX-1]),
 		.uniform(urng_out),
 		.floating(float_out),
 		.data_valid(float_valid)
