@@ -1,3 +1,0 @@
-[submodule "submodules/iCE40-LVDS-RNG"]
-	path = submodules/iCE40-LVDS-RNG
-	url = git@github.com:physical-computation/iCE40-LVDS-RNG.git
