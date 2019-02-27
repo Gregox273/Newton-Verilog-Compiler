@@ -4,6 +4,57 @@
 `include "utils.vh"
 `include "clz.v"
 
+/*
+ * Generate a uniform random number with nonzero exponent section
+ */
+module rng_nonzero_exp_urng (
+	input wire clk, rst,
+	input wire comparator_output,
+	output reg [BX - 1:0] out,
+	output reg exp_valid
+	);
+
+	parameter BX = `URNG_BX;
+
+	reg urng_rst;
+	wire [BX - 1:0] urng_out;
+	wire [BX - 1:0] urng_valid;
+
+	uniform_rng #(.N(BX)) urng(
+		.comparator_output(comparator_output),
+		.clk(clk),
+		.rst(urng_rst),
+		.out(urng_out),
+		.valid(urng_valid)
+		);
+
+	always @ ( posedge clk ) begin
+		if (rst) begin
+			out <= 0;
+			exp_valid <= 0;
+			urng_rst <= 1;
+		end
+		else begin
+			if (urng_valid[BX-1] && urng_out[BX - 3 : MANT_BW] == 0) begin
+	    	// Consume another random number if exponent part is zero
+	      urng_rst <= 1;
+	    end
+	    else if (urng_rst) begin
+	      urng_rst <= 0;
+	    end
+
+	    if (urng_valid[BX-1] && urng_out[BX - 3 : MANT_BW] != 0) begin
+        // New uniform random number is ready
+        out <= urng_out;
+				exp_valid <= 1;
+	    end
+			else if (exp_valid) begin
+				exp_valid <= 0;
+			end
+		end
+	end
+endmodule // rng_nonzero_exp_urng
+
 module rng_uniform_to_float(
 	input clk,
 	input rst,
@@ -67,8 +118,8 @@ module rng_uniform_to_float(
 endmodule  // rng_uniform_to_float
 
 module rng_lookup(
-	input clk,
-	input [EXP_BW:0] section_addr,
+	input clk, en
+ 	input [EXP_BW:0] section_addr,
 	input[K-1:0] subsection_addr,
 	output reg [BY - 1:0] c0, c1
 	);
@@ -88,58 +139,61 @@ module rng_lookup(
 	end
 
 	always@(posedge clk) begin
-		c0 <= lookup_mem_c0[section_addr * 2**K + subsection_addr];
-		c1 <= lookup_mem_c1[section_addr * 2**K + subsection_addr];
+		if(en) begin
+			c0 <= lookup_mem_c0[section_addr * 2**K + subsection_addr];
+			c1 <= lookup_mem_c1[section_addr * 2**K + subsection_addr];
+		end
 	end
 
 endmodule  // rng_lookup
 
 module rng(
 	input comparator_output,
-	input clk,
-	input read
+	input clk, rst
+	input read,
+	output reg [BY - 1:0] out
 	);
 
 	parameter BX = `URNG_BX;
 	parameter MANT_BW  = `RNG_MANT_BW;
+	parameter BY = `RNG_BY;
+	parameter EXP_BW = `RNG_EXP_BW;
+	parameter K = `RNG_K;
+	parameter OFFSET = RNG_GROWING_OCT * (1'b1 << K);// >=RNG_GROWING_OCT * 2^RNG_K
 
-	wire urng_rst;
 	wire [BX-1:0] urng_out;
-	reg [BX-1:0] urng_out_buf;
-	wire [BX-1:0] urng_valid;
-	wire float_rst;
+	wire urng_valid;
+
 	wire [BX-1:0] float_out;
 	wire float_valid;
-	reg [`RNG_BY - 1:0] c0, c1;
 
-	uniform_rng #(.N(BX)) urng(
+
+	wire float_part;
+	assign float_part = float_out[MANT_BW + EXP_BW];
+
+	wire [EXP_BW - 1:0] float_exponent;
+	assign float_exponent = float_out[MANT_BW+EXP_BW - 1:MANT_BW];
+
+	wire [EXP_BW:0] lookup_section_addr;
+	assign lookup_section_addr = ( float_part == 0 )? {0,float_exponent} : float_exponent + OFFSET;  // >=RNG_GROWING_OCT * 2^RNG_K
+
+	wire [K-1:0] lookup_subsection_addr;
+	assign lookup_subsection_addr = float_out[MANT_BW - 1:MANT_BW - K];
+
+	reg [BY - 1:0] lookup_c0, lookup_c1;
+
+	rng_nonzero_exp_urng #(.BX(BX)) urng(
 		.comparator_output(comparator_output),
 		.clk(clk),
-		.rst(urng_rst),
+		.rst(rst),
 		.out(urng_out),
-		.valid(urng_valid)
-	);
-
-	always @ ( posedge clk ) begin
-		if (urng_valid[BX-1] && urng_out[BX - 3 : MANT_BW] == 0) begin
-			// Consume another random number if exponent part is zero
-			urng_rst <= 1;
-		end
-		else if (urng_rst) begin
-			urng_rst <= 0;
-		end
-		else if (urng_valid[`URNG_BX-1]) begin
-			// New uniform random number is ready
-			urng_out_buf <= urng_out;
-		end
-	end
+		.exp_valid(urng_valid)
+		)
 
 	rng_uniform_to_float #(.BX(BX), .MANT_BW(MANT_BW)) u_to_f(
-		//.clk(urng_valid[BX-1]),  // Convert uniform random number once it has been completely generated
 		.clk(clk),
-		.rst(float_rst),
-		.uniform_valid(urng_valid[BX-1]),
-		.uniform(urng_out_buf),
+		.rst(rst),
+		.uniform(urng_out),
 		.floating(float_out),
 		.data_valid(float_valid)
 	);
@@ -147,9 +201,21 @@ module rng(
 	rng_lookup lookup(
 		//.clk(read),
 		.clk(clk),
-		.section_addr(),[EXP_BW:0]
-		.subsection_addr(),[K-1:0]
-		.c0(c0),
-		.c1(c1)
+		.en(float_valid),
+		.section_addr(lookup_section_addr),
+		.subsection_addr(lookup_subsection_addr),
+		.c0(lookup_c0),
+		.c1(lookup_c1)
 	);
+
+	always @ ( posedge clk ) begin
+		if (rst) begin
+			out <= 0;
+			lookup_c0 <= 0;
+			lookup_c1 <= 0;
+		end
+		else begin
+			out <= lookup_c0 + lookup_c1 * float_out[];  // TODO: use hardware multiplier (SB_MAC16) if possible
+		end
+	end;
 endmodule;
