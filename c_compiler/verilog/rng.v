@@ -5,27 +5,27 @@
 `include "clz.v"
 
 /*
- * Generate a uniform random number with nonzero exponent section
+ * Generate uniform random numbers until nonzero exponent section is reached
  */
 module rng_nonzero_exp_urng (
 	input wire clk, rst,
 	input wire comparator_output,
 	output reg [BX - 1:0] out,
-	output reg exp_valid
+	output reg valid
 	);
 
 	parameter BX = `URNG_BX;
 
 	reg urng_rst;
 	wire [BX - 1:0] urng_out;
-	wire [BX - 1:0] urng_valid;
+	wire [BX - 1:0] urng_valid_vector;
 
 	uniform_rng #(.N(BX)) urng(
 		.comparator_output(comparator_output),
 		.clk(clk),
 		.rst(urng_rst),
 		.out(urng_out),
-		.valid(urng_valid)
+		.valid(urng_valid_vector)
 		);
 
 	always @ ( posedge clk ) begin
@@ -35,21 +35,16 @@ module rng_nonzero_exp_urng (
 			urng_rst <= 1;
 		end
 		else begin
-			if (urng_valid[BX-1] && urng_out[BX - 3 : MANT_BW] == 0) begin
-	    	// Consume another random number if exponent part is zero
-	      urng_rst <= 1;
-	    end
-	    else if (urng_rst) begin
-	      urng_rst <= 0;
-	    end
-
-	    if (urng_valid[BX-1] && urng_out[BX - 3 : MANT_BW] != 0) begin
-        // New uniform random number is ready
-        out <= urng_out;
-				exp_valid <= 1;
-	    end
-			else if (exp_valid) begin
-				exp_valid <= 0;
+			valid <= urng_valid_vector[BX-1];
+			if (urng_valid_vector[BX-1]) begin
+				out <= urng_out;
+				if (urng_out[BX - 3 : MANT_BW] == 0) begin
+		    	// Consume another random number if exponent part is zero
+		      urng_rst <= 1;
+		    end
+			end
+			else if (urng_rst) begin
+				urng_rst <= 0;
 			end
 		end
 	end
@@ -60,7 +55,8 @@ module rng_uniform_to_float(
 	input rst,
 	input [BX - 1:0] uniform,
 	output reg [BX - 1:0] floating,
-	output reg data_valid
+	output reg data_valid,
+	output reg rst_urng
 	);
 
 	parameter BX = `URNG_BX;
@@ -150,7 +146,6 @@ endmodule  // rng_lookup
 module rng(
 	input comparator_output,
 	input clk, rst
-	input read,
 	output reg [BY - 1:0] out
 	);
 
@@ -161,61 +156,122 @@ module rng(
 	parameter K = `RNG_K;
 	parameter OFFSET = RNG_GROWING_OCT * (1'b1 << K);// >=RNG_GROWING_OCT * 2^RNG_K
 
-	wire [BX-1:0] urng_out;
+	wire [1:0] urng_rst;  // urng can be reset by uniform_to_float or by module reset
+	wire urng_rst_wire;
+	assign urng_rst_wire = urng_rst[0] | urng_rst[1];
+
+	wire [BX - 1:0] urng_out;
 	wire urng_valid;
 
 	wire [BX-1:0] float_out;
 	wire float_valid;
 
-
-	wire float_part;
-	assign float_part = float_out[MANT_BW + EXP_BW];
-
-	wire [EXP_BW - 1:0] float_exponent;
-	assign float_exponent = float_out[MANT_BW+EXP_BW - 1:MANT_BW];
-
-	wire [EXP_BW:0] lookup_section_addr;
-	assign lookup_section_addr = ( float_part == 0 )? {0,float_exponent} : float_exponent + OFFSET;  // >=RNG_GROWING_OCT * 2^RNG_K
-
-	wire [K-1:0] lookup_subsection_addr;
-	assign lookup_subsection_addr = float_out[MANT_BW - 1:MANT_BW - K];
-
-	reg [BY - 1:0] lookup_c0, lookup_c1;
-
-	rng_nonzero_exp_urng #(.BX(BX)) urng(
+	rng_nonzero_exp_urng #(.N(BX)) urng(
 		.comparator_output(comparator_output),
 		.clk(clk),
-		.rst(rst),
+		.rst(urng_rst_wire),
 		.out(urng_out),
-		.exp_valid(urng_valid)
-		)
+		.valid(urng_valid)
+		);
 
 	rng_uniform_to_float #(.BX(BX), .MANT_BW(MANT_BW)) u_to_f(
 		.clk(clk),
 		.rst(rst),
 		.uniform(urng_out),
 		.floating(float_out),
-		.data_valid(float_valid)
+		.data_valid(float_valid),
+		.rst_urng(urng_rst[0])
 	);
 
-	rng_lookup lookup(
-		//.clk(read),
-		.clk(clk),
-		.en(float_valid),
-		.section_addr(lookup_section_addr),
-		.subsection_addr(lookup_subsection_addr),
-		.c0(lookup_c0),
-		.c1(lookup_c1)
-	);
+	always @ ( posedge clk ) begin
+		if (rst==0) begin
+
+		end
+	end
+
+	always @ ( posedge clk ) begin
+		if (rst==0) begin
+
+		end
+	end
 
 	always @ ( posedge clk ) begin
 		if (rst) begin
 			out <= 0;
-			lookup_c0 <= 0;
-			lookup_c1 <= 0;
+			urng_rst[1] <= 1;
 		end
-		else begin
-			out <= lookup_c0 + lookup_c1 * float_out[];  // TODO: use hardware multiplier (SB_MAC16) if possible
-		end
-	end;
-endmodule;
+	end
+endmodule;  // rng
+
+// module rng(
+// 	input comparator_output,
+// 	input clk, rst
+// 	input read,
+// 	output reg [BY - 1:0] out
+// 	);
+//
+// 	parameter BX = `URNG_BX;
+// 	parameter MANT_BW  = `RNG_MANT_BW;
+// 	parameter BY = `RNG_BY;
+// 	parameter EXP_BW = `RNG_EXP_BW;
+// 	parameter K = `RNG_K;
+// 	parameter OFFSET = RNG_GROWING_OCT * (1'b1 << K);// >=RNG_GROWING_OCT * 2^RNG_K
+//
+// 	wire [BX-1:0] urng_out;
+// 	wire urng_valid;
+//
+// 	wire [BX-1:0] float_out;
+// 	wire float_valid;
+//
+//
+// 	wire float_part;
+// 	assign float_part = float_out[MANT_BW + EXP_BW];
+//
+// 	wire [EXP_BW - 1:0] float_exponent;
+// 	assign float_exponent = float_out[MANT_BW+EXP_BW - 1:MANT_BW];
+//
+// 	wire [EXP_BW:0] lookup_section_addr;
+// 	assign lookup_section_addr = ( float_part == 0 )? {0,float_exponent} : float_exponent + OFFSET;  // >=RNG_GROWING_OCT * 2^RNG_K
+//
+// 	wire [K-1:0] lookup_subsection_addr;
+// 	assign lookup_subsection_addr = float_out[MANT_BW - 1:MANT_BW - K];
+//
+// 	reg [BY - 1:0] lookup_c0, lookup_c1;
+//
+// 	rng_nonzero_exp_urng #(.BX(BX)) urng(
+// 		.comparator_output(comparator_output),
+// 		.clk(clk),
+// 		.rst(rst),
+// 		.out(urng_out),
+// 		.exp_valid(urng_valid)
+// 		)
+//
+// 	rng_uniform_to_float #(.BX(BX), .MANT_BW(MANT_BW)) u_to_f(
+// 		.clk(clk),
+// 		.rst(rst),
+// 		.uniform(urng_out),
+// 		.floating(float_out),
+// 		.data_valid(float_valid)
+// 	);
+//
+// 	rng_lookup lookup(
+// 		//.clk(read),
+// 		.clk(clk),
+// 		.en(float_valid),
+// 		.section_addr(lookup_section_addr),
+// 		.subsection_addr(lookup_subsection_addr),
+// 		.c0(lookup_c0),
+// 		.c1(lookup_c1)
+// 	);
+//
+// 	always @ ( posedge clk ) begin
+// 		if (rst) begin
+// 			out <= 0;
+// 			lookup_c0 <= 0;
+// 			lookup_c1 <= 0;
+// 		end
+// 		else begin
+// 			out <= lookup_c0 + lookup_c1 * float_out[];  // TODO: use hardware multiplier (SB_MAC16) if possible
+// 		end
+// 	end;
+// endmodule;
