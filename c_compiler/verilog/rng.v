@@ -6,6 +6,7 @@
 
 /*
  * Generate uniform random numbers until nonzero exponent section is reached
+ * TODO: finish implementing
  */
 module rng_nonzero_exp_urng (
 	input wire clk, rst,
