@@ -151,6 +151,7 @@ endmodule  // rng_lookup
 module rng(
 	input comparator_output,
 	input clk, rst
+	output urng_valid,
 	output reg [BY - 1:0] out
 	);
 
@@ -162,7 +163,6 @@ module rng(
 	parameter OFFSET = RNG_GROWING_OCT * (1'b1 << K);// >=RNG_GROWING_OCT * 2^RNG_K
 
 	wire [BX - 1:0] urng_out;
-	wire urng_valid;
 
 	wire [BX-1:0] float_out;
 	wire float_valid;
@@ -186,8 +186,9 @@ module rng(
 	always @ ( posedge clk ) begin
 		if (rst) begin
 			out <= 0;
+		end
+		else begin
 
-			urng_rst[1] <= 1;
 		end
 	end
 endmodule;  // rng
