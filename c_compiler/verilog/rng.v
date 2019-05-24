@@ -18,22 +18,32 @@ module rng_uniform_to_float(
 	parameter MANT_BW  = `RNG_MANT_BW;
 	parameter G_OCT = `RNG_GROWING_OCT;
 	parameter D_OCT = `RNG_DIMINISHING_OCT;
+	parameter MAX_G_D = `MAX(G_OCT,D_OCT);
 
 	// If 'RNG_EXP_BW is odd, make even to fit into clz module
 	parameter EXP_BW = (`RNG_EXP_BW % 2) ? `RNG_EXP_BW + 1 : `RNG_EXP_BW;
 
-	wire [`CLOG2(EXP_BW)-1:0] clz_out;
+	wire [(`CLOG2(EXP_BW))-1:0] clz_out;
 	wire clz_valid;
 	wire [BX - MANT_BW - 2 : 0] exp_add_buf;
-	reg [`CLOG2(`MAX(G_OCT,D_OCT))-1:0] max_exp;
+	reg [`CLOG2(MAX_G_D):0] max_exp;
 	reg [BX - 1:0] uniform_pipe;
+
+	// Combinational logic
+	always @ ( * ) begin
+		if(uniform_pipe[BX - 2] == 1) begin
+			max_exp <= D_OCT;
+		end else begin
+			max_exp <= G_OCT;
+		end
+	end
 
 	always @ ( posedge clk ) begin
 		if (rst) begin
 			floating <= 0;
 			float_valid <= 0;
 			rst_urng <= 0;
-			max_exp <= 0;
+			//max_exp <= 0;
 			uniform_pipe <= 0;
 		end
 
@@ -54,12 +64,12 @@ module rng_uniform_to_float(
 
 		// Process an incoming uniform random number
 			uniform_pipe <= uniform;  // delay by one clock cycle to synchronise with clz module
-			//assign max_exp = ( == 1) ? D_OCT : G_OCT ;  // Depends on part bit
-			if(uniform_pipe[BX - 2] == 1) begin
-				max_exp <= D_OCT;
-			end else begin
-				max_exp <= G_OCT;
-			end
+			// // assign max_exp = ( == 1) ? D_OCT : G_OCT ;  // Depends on part bit
+			// if(uniform_pipe[BX - 2] == 1) begin
+			// 	max_exp <= D_OCT;
+			// end else begin
+			// 	max_exp <= G_OCT;
+			// end
 			if (floating[BX - 3 : MANT_BW] + clz_out > max_exp) begin
 				floating[BX - 3 : MANT_BW] <= max_exp;  // Exponent
 				float_valid <= 1;
@@ -116,7 +126,8 @@ endmodule  // rng_lookup
 
 module rng(
 	input clk, rst, bits_in,
-	output reg [BY - 1:0] rng
+	output reg [BY - 1:0] rng,
+	output reg valid
 	);
 
 	parameter BX = `URNG_BX;
@@ -179,6 +190,7 @@ module rng(
 		end
 		else begin
 			rng <= lookup_c0 + lookup_c1 * float_out[MANT_BW-K-1:0];  // TODO: use hardware multiplier (SB_MAC16) if possible
+			valid <= float_valid;
 		end
 	end
 endmodule  // rng
