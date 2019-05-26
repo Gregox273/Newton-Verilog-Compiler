@@ -96,54 +96,66 @@ module clz(
   wire vl, vr;
   wire [0 : bits_out-2] pl, pr;
 
-  if (bits_in % 2) begin
-    // If input is an odd number of bits, convert to even number for the tree structure
-    assign modified_b[0: modified_bits_in - 2] = b;
-    assign modified_b[modified_bits_in - 1] = 1;
-  end
-  else begin
-    assign modified_b = b;
-  end
+  // if (bits_in % 2) begin
+  //   // If input is an odd number of bits, convert to even number for the tree structure
+  //   assign modified_b[0: modified_bits_in - 2] = b;
+  //   assign modified_b[modified_bits_in - 1] = 1;
+  // end
+  // else begin
+  //   assign modified_b = b;
+  // end
 
-  assign input_l = b[0 +: half_bits_in];
-  assign input_r = b[half_bits_in +: half_bits_in];
+  assign modified_b[0: modified_bits_in - 2] = b;
+  assign modified_b[modified_bits_in - 1] = 0;
 
-  if(bits_out <= 2) begin
-    // If this module must contain 2-bit encoders
-    clz_encode clz_l (
-      .in(input_l),
-      .v_out(vl),
-      .p_out(pl)
-    );
+  assign input_l = modified_b[0 +: half_bits_in];
+  assign input_r = modified_b[half_bits_in +: half_bits_in];
 
-    clz_encode clz_r (
-      .in(input_r),
-      .v_out(vr),
-      .p_out(pr)
+  if(bits_out <= 1) begin
+    clz_encode clz (
+      .in(modified_b),
+      .v_out(vout),
+      .p_out(pout)
     );
   end
   else begin
-    clz #(.bits_in(half_bits_in)) clz_l (
-      .b(b[0 +: half_bits_in]),
-      .vout(vl),
-      .pout(pl)
-    );
+    if(bits_out <= 2) begin
+      // If this module must contain 2-bit encoders
+      clz_encode clz_l (
+        .in(input_l),
+        .v_out(vl),
+        .p_out(pl)
+      );
 
-    clz #(.bits_in(half_bits_in)) clz_r (
-      .b(b[half_bits_in +: half_bits_in]),
-      .vout(vr),
-      .pout(pr)
+      clz_encode clz_r (
+        .in(input_r),
+        .v_out(vr),
+        .p_out(pr)
+      );
+    end
+    else begin
+      clz #(.bits_in(half_bits_in)) clz_l (
+        .b(b[0 +: half_bits_in]),
+        .vout(vl),
+        .pout(pl)
+      );
+
+      clz #(.bits_in(half_bits_in)) clz_r (
+        .b(b[half_bits_in +: half_bits_in]),
+        .vout(vr),
+        .pout(pr)
+      );
+    end
+
+    clz_merge_N #(.bits_out(bits_out)) clz_Nx (
+      .vl(vl),
+      .vr(vr),
+      .pl(pl),
+      .pr(pr),
+      .vg(vout),
+      .pg(pout)
     );
   end
-
-  clz_merge_N #(.bits_out(bits_out)) clz_Nx (
-    .vl(vl),
-    .vr(vr),
-    .pl(pl),
-    .pr(pr),
-    .vg(vout),
-    .pg(pout)
-  );
 endmodule  // clz
 
 /*

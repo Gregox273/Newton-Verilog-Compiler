@@ -1,8 +1,8 @@
 # Differential Privacy System Configuration
 # Gregory Brooks 2018/19
 
-URNG:
-  BX : 8  # Number of bits in URNG output
+# URNG:
+#   BX : 8  # Number of bits in URNG output
 
 # RNG based on work by de Schryver et al.:
 #  Christian de Schryver, Daniel Schmidt, Norbert Wehn, et al., “A Hardware Efficient Random Number Generator for

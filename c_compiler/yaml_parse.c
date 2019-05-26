@@ -1,3 +1,4 @@
+#include <math.h>
 #include <yaml.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -230,9 +231,27 @@ int yaml_parse_parse(const char *filename, UrngData *const urng_data, RngData *c
     yaml_parser_delete(&parser);
     fclose(yaml_file);
 
-    // TODO: check whether values are valid e.g. MANT_BW must be < BY
+    // Calculate required BX value
+    state.rng_data_addr->MAX_G_D = state.rng_data_addr->GROWING_OCT;
+
+    if (state.rng_data_addr->DIMINISHING_OCT > state.rng_data_addr->MAX_G_D)
+    {
+        state.rng_data_addr->MAX_G_D = state.rng_data_addr->DIMINISHING_OCT;
+    }
+
+    state.rng_data_addr->EXP_BW = 1 + ceil(log2(state.rng_data_addr->MAX_G_D));
+    state.rng_data_addr->SEC_ADDR_SIZE = 1 + ceil(log2(state.rng_data_addr->GROWING_OCT + state.rng_data_addr->DIMINISHING_OCT));
+    state.urng_data_addr->BX = 2 + state.rng_data_addr->MANT_BW + state.rng_data_addr->EXP_BW;
+
+
+    // TODO: check whether values are valid
     // See Python prototype for some examples of sanity checks
     // E.g. limit K to 48 bits or less (see main.c)
+    if (state.rng_data_addr->MANT_BW <= state.rng_data_addr->K)
+    {
+        printf("MANT_BW should be greater than K\n");
+        exit(EXIT_FAILURE);
+    }
     return 0;
 }
 

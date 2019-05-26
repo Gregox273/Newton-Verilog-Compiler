@@ -16,6 +16,9 @@ typedef struct
     uint8_t MANT_BW;
     uint8_t GROWING_OCT;
     uint8_t DIMINISHING_OCT;
+    uint8_t EXP_BW;
+    uint8_t MAX_G_D;
+    uint8_t SEC_ADDR_SIZE;
 }RngData;
 
 /* Parse YAML file, extracting and storing useful information

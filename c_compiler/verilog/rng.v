@@ -18,22 +18,25 @@ module rng_uniform_to_float(
 	parameter MANT_BW  = `RNG_MANT_BW;
 	parameter G_OCT = `RNG_GROWING_OCT;
 	parameter D_OCT = `RNG_DIMINISHING_OCT;
-	parameter MAX_G_D = `MAX(G_OCT,D_OCT);
+	parameter MAX_G_D = `RNG_MAX_G_D;
 	parameter EXP_BW = `RNG_EXP_BW;
 
+	wire [(`CLOG2(EXP_BW)):0] leading_zeros;
 	wire [(`CLOG2(EXP_BW))-1:0] clz_out;
 	wire clz_valid;
 	wire [BX - MANT_BW - 2 : 0] exp_add_buf;
-	reg [`CLOG2(MAX_G_D):0] max_exp;
+	reg [(`CLOG2(MAX_G_D)):0] max_exp;
 	reg [BX - 1:0] uniform_pipe;
 	reg urng_valid_pipe;
+
+	assign leading_zeros = (clz_valid) ? {1'b0, clz_out} : EXP_BW;
 
 	// Combinational logic
 	always @ ( * ) begin
 		if(uniform_pipe[BX - 2] == 1) begin
-			max_exp <= D_OCT;
+			max_exp <= D_OCT - 1;
 		end else begin
-			max_exp <= G_OCT;
+			max_exp <= G_OCT - 1;
 		end
 	end
 
@@ -64,11 +67,11 @@ module rng_uniform_to_float(
 			uniform_pipe <= uniform;  // delay by one clock cycle to synchronise with clz module
 			urng_valid_pipe <= urng_valid;
 			if(urng_valid_pipe) begin
-				if (floating[BX - 3 : MANT_BW] + clz_out > max_exp) begin
+				if (floating[BX - 3 : MANT_BW] + leading_zeros > max_exp) begin
 					floating[BX - 3 : MANT_BW] <= max_exp;  // Exponent
 					float_valid <= urng_valid_pipe;
 				end else begin
-					floating[BX - 3 : MANT_BW] <= floating[BX - 3 : MANT_BW] + clz_out;
+					floating[BX - 3 : MANT_BW] <= floating[BX - 3 : MANT_BW] + leading_zeros;
 					float_valid <= clz_valid & urng_valid_pipe;
 				end
 				floating[BX - 1] <= uniform_pipe[BX - 1];  // symm
@@ -90,16 +93,17 @@ endmodule  // rng_uniform_to_float
 
 module rng_lookup(
 	input clk, en,
- 	input [EXP_BW:0] section_addr,
+ 	input [SEC_ADDR_SIZE-1:0] section_addr,
 	input[K-1:0] subsection_addr,
 	output reg [BY - 1:0] c0, c1
 	);
 
-	parameter EXP_BW   = `RNG_EXP_BW;
+	parameter EXP_BW = `RNG_EXP_BW;
 	parameter K  = `RNG_K;
 	parameter BY = `RNG_BY;
 	parameter G_OCT = `RNG_GROWING_OCT;
 	parameter D_OCT = `RNG_DIMINISHING_OCT;
+	parameter SEC_ADDR_SIZE = `RNG_SEC_ADDR_SIZE;
 
 	reg [BY-1:0] lookup_mem_c0 [0:(G_OCT+D_OCT)*2**K - 1];
 	reg [BY-1:0] lookup_mem_c1 [0:(G_OCT+D_OCT)*2**K - 1];
@@ -129,6 +133,7 @@ module rng(
 	parameter BY = `RNG_BY;
 	parameter EXP_BW = `RNG_EXP_BW;
 	parameter K = `RNG_K;
+	parameter SEC_ADDR_SIZE = `RNG_SEC_ADDR_SIZE;
 	integer OFFSET = `RNG_GROWING_OCT;
 
 	reg valid_pipe;
@@ -146,7 +151,7 @@ module rng(
 	wire float_part;
 	wire [EXP_BW - 1:0] float_exponent;
 	wire signed [MANT_BW-K-1:0] float_mant_lsb;
-	wire [EXP_BW:0] lookup_section_addr;
+	wire [SEC_ADDR_SIZE-1:0] lookup_section_addr;
 	wire [K-1:0] lookup_subsection_addr;
 	wire signed [BY - 1:0] lookup_c0, lookup_c1;
 

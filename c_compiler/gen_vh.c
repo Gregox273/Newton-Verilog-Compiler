@@ -61,12 +61,17 @@ int gen_vh_rng(const char *destination, const RngData *const rng_data)
             "`define RNG_BY %d\n"
             "`define RNG_K %d\n"
             "`define RNG_MANT_BW %d\n"
-            "`define RNG_EXP_BW `URNG_BX - `RNG_MANT_BW - 2\n"
+            "`define RNG_EXP_BW %d\n"
+            "`define RNG_MAX_G_D %d\n"
+            "`define RNG_SEC_ADDR_SIZE %d\n"
             "`define RNG_GROWING_OCT %d\n"
             "`define RNG_DIMINISHING_OCT %d",
             rng_data->BY,
             rng_data->K,
             rng_data->MANT_BW,
+            rng_data->EXP_BW,
+            rng_data->MAX_G_D,
+            rng_data->SEC_ADDR_SIZE,
             rng_data->GROWING_OCT,
             rng_data->DIMINISHING_OCT);
 
@@ -75,12 +80,17 @@ int gen_vh_rng(const char *destination, const RngData *const rng_data)
              "`define RNG_BY %d\n"
              "`define RNG_K %d\n"
              "`define RNG_MANT_BW %d\n"
-             "`define RNG_EXP_BW `URNG_BX - `RNG_MANT_BW - 2\n"
+             "`define RNG_EXP_BW %d\n"
+             "`define RNG_MAX_G_D %d\n"
+             "`define RNG_SEC_ADDR_SIZE %d\n"
              "`define RNG_GROWING_OCT %d\n"
              "`define RNG_DIMINISHING_OCT %d",
              rng_data->BY,
              rng_data->K,
              rng_data->MANT_BW,
+             rng_data->EXP_BW,
+             rng_data->MAX_G_D,
+             rng_data->SEC_ADDR_SIZE,
              rng_data->GROWING_OCT,
              rng_data->DIMINISHING_OCT);
 

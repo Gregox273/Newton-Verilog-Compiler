@@ -25,9 +25,9 @@ int gen_lookup_c0(const RngData *rng_data, by_t *buffer, by_t *max_out)
     uint8_t remaining_mant_bits = rng_data->MANT_BW - rng_data->K;
 
     // Smallest division within smallest subsection for part = false
-    double min_x_coord = (double)(1.0 / (1 << (rng_data->GROWING_OCT + 1) ));  // Octave width
+    double min_x_coord = (double)(1.0 / (pow(2,(rng_data->GROWING_OCT + 1)) ));  // Octave width
     min_x_coord /= num_subsect;  // Subsection width
-    min_x_coord /= 1 << remaining_mant_bits;  // Mantissa division width
+    min_x_coord /= pow(2,remaining_mant_bits);  // Mantissa division width
 
     double max_abs = 0.0 - icdf_laplace_double(min_x_coord, mu, b);
 
@@ -50,15 +50,15 @@ int gen_lookup_c0(const RngData *rng_data, by_t *buffer, by_t *max_out)
         {
             // Section closest to zero is the same width as the one after
             part = false;
-            octave_width = 1.0 / (1 << (section + 2));
-            octave_bound = 1.0 / (1 << (section + 2));  // Upper bound
+            octave_width = 1.0 / (pow(2,(section + 2)));
+            octave_bound = 1.0 / (pow(2,(section + 2)));  // Upper bound
         }
         else if(section == num_sect - 1)
         {
             // Final section has same width as penultimate section
             part = true;
             section_t exp = section - rng_data->GROWING_OCT;
-            octave_width = 1.0 / (1 << (exp + 2));
+            octave_width = 1.0 / (pow(2,(exp + 2)));
             octave_bound = 0.5 - octave_width; // Lower bound
         }
         else
@@ -71,15 +71,15 @@ int gen_lookup_c0(const RngData *rng_data, by_t *buffer, by_t *max_out)
                 part = true;
             }
 
-            octave_width = 1.0 / (1 << (exp + 3));
+            octave_width = 1.0 / (pow(2,(exp + 3)));
 
             if(part)
             {
-                octave_bound = 0.5 - 1.0 / (1 << (exp + 2)); // Lower bound
+                octave_bound = 0.5 - 1.0 / (pow(2,(exp + 2))); // Lower bound
             }
             else
             {
-                octave_bound = 1.0 / (1 << (exp + 2)); // Upper bound
+                octave_bound = 1.0 / (pow(2,(exp + 2))); // Upper bound
             }
         }
 
@@ -116,7 +116,7 @@ int gen_lookup_c1(const RngData *rng_data, by_t *c0, by_t max_out, by_t *c1)
         if(i == rng_data->GROWING_OCT * num_subsect - 1)
         {
             // Subsection containing zero asymptote
-            c1[i] = (by_t)round((double)(max_out - c0[i])/((1 << remaining_mant_bits) - 1));
+            c1[i] = (by_t)round((double)(max_out - c0[i])/((pow(2,remaining_mant_bits)) - 1));
         }
         else if(i == rng_data->GROWING_OCT * num_subsect)
         {
