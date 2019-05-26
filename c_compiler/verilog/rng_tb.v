@@ -38,7 +38,7 @@ module rng_tb;
     $dumpvars;
     $monitor("%d,\t%b,\t%b,\t%b,\t%b",$time,clk,bits_in,out ,valid);
 
-    bits_in = 1'b0;  // init
+    bits_in = 1'b1;  // init
     @(negedge rst);  // wait for reset
     @(posedge clk);
 

@@ -87,15 +87,26 @@ module clz(
   output [0 : bits_out-1] pout);
 
   parameter bits_in = 8;
-  localparam half_bits_in = bits_in/2;
+  localparam modified_bits_in = (bits_in % 2) ? bits_in + 1 : bits_in;
+  localparam half_bits_in = modified_bits_in/2;
   localparam bits_out = `CLOG2(bits_in);
 
-  wire [0 : bits_in/2 - 1] input_l, input_r;
+  wire [0 : modified_bits_in - 1] modified_b;
+  wire [0 : half_bits_in - 1] input_l, input_r;
   wire vl, vr;
   wire [0 : bits_out-2] pl, pr;
 
-  assign input_l = b[0 +: bits_in/2];
-  assign input_r = b[bits_in/2 +: bits_in/2];
+  if (bits_in % 2) begin
+    // If input is an odd number of bits, convert to even number for the tree structure
+    assign modified_b[0: modified_bits_in - 2] = b;
+    assign modified_b[modified_bits_in - 1] = 1;
+  end
+  else begin
+    assign modified_b = b;
+  end
+
+  assign input_l = b[0 +: half_bits_in];
+  assign input_r = b[half_bits_in +: half_bits_in];
 
   if(bits_out <= 2) begin
     // If this module must contain 2-bit encoders
@@ -112,14 +123,14 @@ module clz(
     );
   end
   else begin
-    clz #(.bits_in(bits_in/2)) clz_l (
-      .b(b[0 +: bits_in/2]),
+    clz #(.bits_in(half_bits_in)) clz_l (
+      .b(b[0 +: half_bits_in]),
       .vout(vl),
       .pout(pl)
     );
 
-    clz #(.bits_in(bits_in/2)) clz_r (
-      .b(b[bits_in/2 +: bits_in/2]),
+    clz #(.bits_in(half_bits_in)) clz_r (
+      .b(b[half_bits_in +: half_bits_in]),
       .vout(vr),
       .pout(pr)
     );
